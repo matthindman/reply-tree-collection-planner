@@ -20,6 +20,10 @@ Japanese X today" (about 12% of replies in conversations of 100+ posts); the oth
 - `data/calibrate_today.js` — tunes a full parameter set to a list of targets (not used for the current best guess).
 - `src/style.css`, `src/page.html` — styles and page markup.
 - `test/` — checks of the simulator and the cost engine against the Python results.
+- `estimation/` — Python code that estimates the model's 18 parameters from post records by maximum
+  likelihood, with tests and a worked example. See `estimation/README.md`. In the public repository this
+  folder holds the package itself; here it holds the README and the example, and `sync_public.sh` adds the
+  package from the research repository.
 
 ## Scenarios
 
@@ -55,6 +59,8 @@ monthly reply volume are placeholders.
 ## Public copy
 
 The page is served at https://matthindman.github.io/reply-tree-collection-planner/ from the public
-repository `reply-tree-collection-planner`, which holds a copy of this folder (without `planner.html`).
-To update it after a change here: copy `README.md build.py index.html src data test` into a checkout of
-that repository, commit and push; GitHub Pages redeploys in about a minute.
+repository `reply-tree-collection-planner`, which holds a copy of this folder (without `planner.html`)
+and the estimation code. To update it after a change here: run
+`./sync_public.sh /path/to/reply-tree-collection-planner`, then commit and push in that checkout;
+GitHub Pages redeploys in about a minute. Add `planner` or `estimation` as a second argument to copy
+only that part.

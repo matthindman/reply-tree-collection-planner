@@ -1,0 +1,9 @@
+[project]
+name = "replytree2024"
+version = "0.1.0"
+description = "Fitting and checking reply-tree models on raw trees (Claude-owned modules)"
+requires-python = ">=3.10"
+dependencies = ["numpy>=1.26", "scipy>=1.11"]
+
+[tool.setuptools]
+packages = ["replytree2024"]
