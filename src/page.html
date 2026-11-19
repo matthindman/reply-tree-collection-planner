@@ -30,21 +30,30 @@
       </section>
 
       <section class="card">
-        <h3>What a cascade is made of, and what the plan keeps</h3>
+        <h3>Where the cap goes, and what each tier keeps</h3>
         <p class="sub" id="c-sub-mix"></p>
+        <div class="legend" id="c-leg-cap"></div>
+        <div class="chart" id="c-cap"></div>
         <div class="legend" id="c-leg-mix"></div>
         <div class="chart" id="c-mix"></div>
       </section>
 
+      <section class="card">
+        <h3>What fits under the cap</h3>
+        <p class="sub" id="c-sub-fit"></p>
+        <div class="legend" id="c-leg-fit"></div>
+        <div class="chart" id="c-fit"></div>
+      </section>
+
       <div class="pair">
         <section class="card">
-          <h3>What fits under the cap</h3>
-          <p class="sub" id="c-sub-fit"></p>
-          <div class="legend" id="c-leg-fit"></div>
-          <div class="chart" id="c-fit"></div>
+          <h3>How fast cascades grow</h3>
+          <p class="sub" id="c-sub-grow"></p>
+          <div class="legend" id="c-leg-grow"></div>
+          <div class="chart" id="c-grow"></div>
         </section>
         <section class="card">
-          <h3>What the stream finds</h3>
+          <h3>What each way of finding sees</h3>
           <p class="sub" id="c-sub-find"></p>
           <div class="legend" id="c-leg-find"></div>
           <div class="chart" id="c-find"></div>
@@ -54,14 +63,17 @@
       <section class="foot">
         <h3>How to read this</h3>
         <ul>
-          <li>A cascade is an original post (root) with everything that hangs from it inside the window: replies, quotes and retweets. Retweets and quotes that are not replies carry no conversation ID, so a cascade is assembled from the post each one refers to.</li>
-          <li>The monthly figures on the left are inputs, not measurements made here. Sizes above 1,000 posts follow a Pareto tail whose exponent is set by the mean size you enter. The mix of retweets, replies and quotes is taken to be the same at every size.</li>
-          <li>Costs are in units. One unit is the charge for one post returned. A count lookup of a root is one unit, charged once a day.</li>
-          <li>A cascade's size is read from its root's public counts. Those cover retweets, replies and quotes of the root, not retweets of its replies or of its quotes, so sizes are slightly understated.</li>
-          <li>A count request returns totals by minute for up to 31 days and is charged per request, not per post. Three requests give the timing of a cascade's retweets, replies and quotes. That X accepts these queries on the counts endpoint is documented but has not been tried on a paid account.</li>
-          <li>Retweets that are not downloaded are still observed: the stream carries a random share of them, and the count curves give how many there were in each minute. What is lost is the full list of who retweeted.</li>
-          <li>A bought sample of retweets comes through a stream rule and starts when a cascade is flagged, so it misses the earliest retweets. The first N retweets come from search, using the count curve to pick the time window.</li>
-          <li>Nothing here has been tested on a paid account. The search operators for retweets, quotes and replies of a post are documented by X; their charges and completeness are assumed.</li>
+          <li>A cascade is the posts sharing one conversation ID (a root and its replies at any depth) plus every retweet and quote of those posts. Its size leaves the root out. A quote that is not a reply counts once in the cascade it quotes and is the root of a cascade of its own.</li>
+          <li>Three tiers. Cascades at or above the first size are collected in full. Cascades at or above the second get their replies and quotes. For cascades at or above the third, search returns the root and its counts.</li>
+          <li>Sizes are counts at 1,000, 5,000, 10,000 and 20,000 posts over a seven-day window. Between them the curves are straight lines on log-log axes; above 20,000 they follow a power law set by the mean size there. Three days keeps 95.7% of the seven-day posts, measured at 10,000+ and applied at every size.</li>
+          <li>Below 1,000 posts there is one count, made under an earlier definition: 1.57 million cascades of 100+ posts, with about 376M posts in those of 100 to 999. Treat everything below 1,000 as rough.</li>
+          <li>Cascade counts are for roots that are original posts. Post totals also include cascades rooted at a quote; those totals are lower bounds and the number of such cascades is not known.</li>
+          <li>Retweets, replies and quotes are taken to be the same share of posts at every size. Measured overall: retweets 80 to 89%, replies 6 to 15%, quotes about 5%.</li>
+          <li>Costs are in units. One unit is the charge for one post returned. Each search pass is charged one unit for every root at or above the third size.</li>
+          <li>A root's own counts cover its retweets, quotes and direct replies. A cascade's size sums over all its posts, so the root's counts understate it. By how much has not been measured.</li>
+          <li>The stream-only design predicts at day 1 which cascades will pass 10,000 posts in seven days and pays for the wrong guesses: 69M to 99M posts a month for 3,206 cascades.</li>
+          <li>The first N retweets and a random sample of retweets are ways to buy some retweeters for the second tier. Neither has been tried.</li>
+          <li>Nothing here has been tested on a paid account. That search filters on a post's counts at the time of the query, and what a repeated pass is charged, are assumed.</li>
           <li id="c-foot-build"></li>
         </ul>
       </section>

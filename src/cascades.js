@@ -2,59 +2,53 @@
    To change a default or a label, edit DEFAULTS and GROUPS below, then run build.py. */
 (function () {
   'use strict';
-  const U = PLANNER.ui, el = U.el, frame = U.frame, lin = U.lin, logS = U.logS, logTicks = U.logTicks, path = U.path, legend = U.legend, row = U.row, big = U.big, pct = U.pct, int = U.int;
+  const U = PLANNER.ui, D = CASCADE.DATA, el = U.el, frame = U.frame, lin = U.lin, logS = U.logS, logTicks = U.logTicks, path = U.path, legend = U.legend, row = U.row, big = U.big, pct = U.pct, int = U.int;
 
   /* ====================================================================== defaults */
-  // Figures given by the collaborators on 19 November 2026 for a three-day window. Inputs, not measurements made here.
+  // Sizes come from CASCADE.DATA (cascade_model.js): counts for September 2026 on the full Japanese stream.
   const DEFAULTS = {
     cap: 1e8,            // units a month
-    stream: 0.01,        // share of all posts in the stream; the stream is outside the cap
-    days: 3,             // observation window
-    n1000: 122000,       // cascades of 1,000+ posts a month
-    p1000: 3.4e8,        // posts in them, quotes aside
-    q1000: 4.5e7,        // quotes of them
-    rt: 0.87,            // retweets as a share of those posts (given as 85 to 89%)
-    nAll: 1.57e6,        // cascades counted a month; its size floor is not known, so it is only reported
-    cut: 1000, quotes: true, under: 0, rtMode: 'none', rtN: 100, rtRate: 0.03, rtShare: 1, hits: 1,
-    curves: true, curveCut: 1000, curveCost: 1,   // minute-by-minute counts of retweets, replies and quotes: one request each
+    reserve: 1e7,        // kept back for daily spikes, the largest cascades and lookups
+    window: 3,           // days after the root is posted
+    month: 'September',  // which measured month the volumes follow
+    rt: 0.85,            // retweets as a share of posts (measured as 80 to 89%)
+    qt: 0.05,            // quotes as a share of posts (measured as about 5%)
+    quoteRooted: true,   // count cascades rooted at a quote as well
+    full: 10000,         // tier 1: every post, for cascades of at least this many posts
+    rqAuto: true, rq: 2500,   // tier 2: replies and quotes; rqAuto sets rq to the lowest size that fits
+    rtMode: 'none', rtN: 100, rtRate: 0.03,   // retweets bought for tier 2
+    census: 100, passes: 3,   // tier 3: the root and its counts, searched this many times a day apart
+    stream: 0.01,        // the sample stream, outside the cap
   };
-  const CUTS = [200, 300, 500, 750, 1000, 1500, 2000, 3000, 5000, 7500, 10000, 15000, 20000, 50000, 100000];
-  const TYPE = { replies: 'var(--root)', quotes: 'var(--both)', retweets: 'var(--sample)' };
-  let st = JSON.parse(JSON.stringify(DEFAULTS));
+  const TIER = { full: 'var(--quiet)', rq: 'var(--root)', bought: 'var(--sample)', census: 'var(--both)', reserve: 'var(--ref)' };
+  const KIND = ['var(--root)', 'var(--sample)', 'var(--both)'];
+  let st = JSON.parse(JSON.stringify(DEFAULTS)), pop = null;
+  const sz = (v) => int(v) + ' posts';
 
   const GROUPS = [
     { title: 'The contract', controls: [
       { key: 'cap', kind: 'log', label: 'Monthly cap, in units', min: 1e7, max: 1e9, fmt: big, hint: 'One unit is the charge for one post returned.' },
-      { key: 'stream', kind: 'seg', label: 'Sample stream, outside the cap', options: [[0, 'None'], [0.01, '1%'], [0.1, '10%']],
-        hint: 'A random share of all posts, retweets included. It does not count against the cap.' },
-      { key: 'days', kind: 'range', label: 'Window after the root is posted', min: 1, max: 7, step: 1, fmt: (v) => v + (v === 1 ? ' day' : ' days') },
+      { key: 'reserve', kind: 'range', label: 'Kept in reserve', min: 0, max: 3e7, step: 1e6, fmt: (v) => (v ? big(v) : 'none'), hint: 'For daily spikes, the largest cascades and lookups.' },
+      { key: 'window', kind: 'seg', label: 'Window after the root is posted', options: [[3, '3 days'], [7, '7 days']] },
     ] },
-    { title: 'Cascades of 1,000+ posts, a month', controls: [
-      { key: 'n1000', kind: 'log', label: 'How many there are', min: 1e4, max: 1e6, fmt: big },
-      { key: 'p1000', kind: 'log', label: 'Posts in them, quotes aside', min: 3e7, max: 3e9, fmt: big, hint: 'Roots, replies and retweets.' },
-      { key: 'q1000', kind: 'log', label: 'Quotes of them', min: 1e6, max: 5e8, fmt: big },
-      { key: 'rt', kind: 'range', label: 'Retweets, as a share of those posts', min: 0.7, max: 0.97, step: 0.01, fmt: (v) => Math.round(100 * v) + '%', hint: 'Given as 85 to 89%.' },
-      { key: 'nAll', kind: 'log', label: 'All cascades counted a month', min: 2e5, max: 2e7, fmt: big, hint: 'Used only to report the smallest size this count corresponds to.' },
+    { title: 'Volumes', controls: [
+      { key: 'month', kind: 'seg', label: 'A month like, in 2026', options: [['June', 'Jun'], ['July', 'Jul'], ['August', 'Aug'], ['September', 'Sep']], hint: 'Sizes were measured for September, the largest of the four. The others scale it by their total.' },
+      { key: 'rt', kind: 'range', label: 'Retweets, as a share of posts', min: 0.78, max: 0.91, step: 0.01, fmt: (v) => Math.round(100 * v) + '%', hint: 'Measured as 80 to 89%. Quotes are taken as 5% and replies as the rest.' },
+      { key: 'quoteRooted', kind: 'check', label: 'Count cascades rooted at a quote' },
       { kind: 'facts', id: 'c-facts' },
     ] },
     { title: 'What to collect', controls: [
-      { key: 'cut', kind: 'pick', label: 'Cascades of at least', choices: CUTS, fmt: (v) => int(v) + ' posts' },
-      { key: 'quotes', kind: 'check', label: 'Download quotes' },
-      { key: 'under', kind: 'range', label: 'Posts under each quote', min: 0, max: 2, step: 0.05, fmt: (v) => v.toFixed(2), disabled: () => !st.quotes,
-        hint: 'Replies to a quote, and quotes of it, per quote. Unknown; 0 leaves them out.' },
-      { key: 'curves', kind: 'check', label: 'Buy count curves' },
-      { key: 'curveCut', kind: 'pick', label: 'Count curves for cascades of at least', choices: CUTS, fmt: (v) => int(v) + ' posts', disabled: () => !st.curves,
-        hint: 'Three count requests per cascade give minute-by-minute totals of its retweets, replies and quotes, without downloading them.' },
-      { key: 'curveCost', kind: 'range', label: 'Price of one count request', min: 0, max: 2, step: 1, fmt: (v) => v + (v === 1 ? ' unit' : ' units'), disabled: () => !st.curves,
-        hint: 'One unit for the last seven days on the public price list. Set to 0 if counts do not draw on the cap.' },
-      { key: 'rtMode', kind: 'seg', label: 'Download retweets', options: [['none', 'None'], ['sample', 'Sample'], ['first', 'First N'], ['all', 'All']],
-        hint: 'Each retweet downloaded shows who retweeted and when. Sample buys a random share through a stream rule, from the moment a cascade is flagged.' },
-      { key: 'rtRate', kind: 'range', label: 'Random share of retweets bought', min: 0.01, max: 0.5, step: 0.01, fmt: (v) => Math.round(100 * v) + '%', disabled: () => st.rtMode !== 'sample' },
-      { key: 'rtN', kind: 'pick', label: 'Retweets read from each cascade', choices: [50, 75, 100, 500, 1000, 5000, 10000], fmt: (v) => 'first ' + int(v), disabled: () => st.rtMode !== 'first',
-        hint: 'The count curve shows which time window holds the first N.' },
-      { key: 'rtShare', kind: 'range', label: 'For this share of cascades', min: 0.05, max: 1, step: 0.05, fmt: (v) => Math.round(100 * v) + '%', disabled: () => st.rtMode === 'none',
-        hint: 'A random share of cascades gets its retweets downloaded.' },
-      { key: 'hits', kind: 'range', label: 'Sampled posts needed to flag a cascade', min: 1, max: 5, step: 1, fmt: (v) => String(v), disabled: () => !(st.stream > 0) },
+      { key: 'full', kind: 'pick', label: 'Every post, for cascades of at least', choices: [5000, 6000, 7500, 10000, 12500, 15000, 20000, 30000, 50000, Infinity], fmt: (v) => (v === Infinity ? 'no cascade' : sz(v)) },
+      { key: 'rqAuto', kind: 'check', label: 'Take replies and quotes as low as fits' },
+      { key: 'rq', kind: 'log', label: 'Replies and quotes, for cascades of at least', min: 100, max: 20000, fmt: sz, disabled: () => st.rqAuto,
+        hint: 'Below 1,000 posts the sizes are rough.' },
+      { key: 'rtMode', kind: 'seg', label: 'Retweets for those cascades', options: [['none', 'Stream only'], ['first', 'First N'], ['sample', 'Sample']],
+        hint: 'The 1% stream shows a random 1% of retweets at no cost. First N and Sample buy more.' },
+      { key: 'rtN', kind: 'pick', label: 'Retweets read from each cascade', choices: [50, 100, 250, 500, 1000], fmt: (v) => 'first ' + int(v), disabled: () => st.rtMode !== 'first' },
+      { key: 'rtRate', kind: 'range', label: 'Random share of retweets bought', min: 0.01, max: 0.3, step: 0.01, fmt: (v) => Math.round(100 * v) + '%', disabled: () => st.rtMode !== 'sample' },
+      { key: 'census', kind: 'pick', label: 'Root and counts, for cascades of at least', choices: [100, 200, 300, 500, 1000], fmt: sz,
+        hint: 'Search by counts returns every root at or above this size.' },
+      { key: 'passes', kind: 'range', label: 'Search passes for each day of roots', min: 1, max: 3, step: 1, fmt: (v) => (v === 1 ? 'once' : v === 2 ? 'twice' : '3 times'), hint: 'A day apart. Each pass returns every root again.' },
     ] },
   ];
 
@@ -94,50 +88,48 @@
       });
       rail.appendChild(sec);
     });
-    const sec = mk('section', 'group'), b = mk('button', 'btn', 'Reset to the figures given'); b.type = 'button';
+    const sec = mk('section', 'group'), b = mk('button', 'btn', 'Reset to the measured figures'); b.type = 'button';
     b.addEventListener('click', () => { st = JSON.parse(JSON.stringify(DEFAULTS)); changed(); }); sec.appendChild(b); rail.appendChild(sec);
   }
   let raf = 0;
-  function changed() { refreshers.forEach((f) => f()); if (!raf) raf = requestAnimationFrame(() => { raf = 0; render(); }); }
+  function changed() { derive(); refreshers.forEach((f) => f()); if (!raf) raf = requestAnimationFrame(() => { raf = 0; render(); }); }
 
-  /* ====================================================================== words */
-  const opts = (over) => Object.assign({ cut: st.cut, quotes: st.quotes, under: st.under, rtMode: st.rtMode, rtN: st.rtN, rtRate: st.rtRate, rtShare: st.rtShare, days: st.days, stream: st.stream, hits: st.hits,
-    curves: st.curves ? 3 : 0, curveCut: st.curveCut, curveCost: st.curveCost }, over || {});
-  const streamName = () => (100 * st.stream) + '% stream';
-  function what() {
-    const base = st.quotes ? 'Replies and quotes' : 'Replies';
-    if (st.rtMode === 'none') return base;
-    const share = st.rtShare < 0.995 ? ' for ' + Math.round(100 * st.rtShare) + '% of cascades' : '';
-    if (st.rtMode === 'all') return st.quotes && !share ? 'Every post' : base + ', and every retweet' + share;
-    if (st.rtMode === 'sample') return base + ', and a random ' + Math.round(100 * st.rtRate) + '% of retweets' + share;
-    return base + ', and the first ' + int(st.rtN) + ' retweets' + share;
+  /* ====================================================================== the plan */
+  const opts = (over) => Object.assign({ full: st.full, rq: st.rq, census: st.census, passes: st.passes, rt: st.rt, qt: st.qt, rtMode: st.rtMode, rtN: st.rtN, rtRate: st.rtRate, stream: st.stream }, over || {});
+  const budget = () => Math.max(0, st.cap - st.reserve);
+  const roundUp = (v) => { const p = Math.pow(10, Math.floor(Math.log10(v)) - 1); return Math.ceil(v / p - 1e-9) * p; };
+  const top2 = () => (st.full === Infinity ? 100000 : st.full);
+  function derive() {
+    pop = CASCADE.population({ scale: D.months[st.month], window: st.window, quoteRooted: st.quoteRooted });
+    if (st.rqAuto) { const e = CASCADE.lowest(pop, opts(), 'rq', budget(), st.census, top2()); st.rq = e == null ? top2() : Math.min(top2(), roundUp(e)); }
   }
-  function recipe(r) {
-    const parts = [];
-    parts.push(st.stream > 0 ? 'Flag a cascade when ' + (st.hits === 1 ? 'one of its posts appears' : st.hits + ' of its posts appear') + ' in the ' + streamName() + '.'
-      : 'Search each day for roots whose repost count shows a cascade of at least ' + int(st.cut / 2) + ' posts.');
-    parts.push('Look up each flagged root’s counts once a day until day ' + st.days + ', and keep those that reach ' + int(st.cut) + ' posts.');
-    if (st.curves) parts.push('Request minute-by-minute counts of the retweets, replies and quotes of each cascade of ' + int(st.curveCut) + '+ posts.');
-    parts.push('Download the replies' + (st.quotes ? ' and quotes' : '') + ' of cascades of ' + int(st.cut) + '+ posts.');
-    parts.push(st.rtMode === 'none' ? (st.stream > 0 ? 'Take retweeters from the stream sample' : 'Take no individual retweets') + (st.curves ? '; the count curves give the timing of every retweet.' : ' and totals from the daily lookups.')
-      : (st.rtMode === 'sample' ? 'Buy a random ' + Math.round(100 * st.rtRate) + '% of their retweets through a stream rule' : 'Download ' + (st.rtMode === 'all' ? 'every retweet' : 'the first ' + int(st.rtN) + ' retweets of each')) + (st.rtShare < 0.995 ? ', for a random ' + Math.round(100 * st.rtShare) + '% of cascades.' : '.'));
+  const passAges = () => { const end = 24 * st.window; return st.passes === 1 ? [end] : st.passes === 2 ? [24, end] : [24, 48, end]; };
+  const ageTxt = (h) => (h % 24 === 0 && h > 72 ? h / 24 + ' days' : h + ' hours');
+  const list = (a) => (a.length < 2 ? a.join('') : a.slice(0, -1).join(', ') + ' and ' + a[a.length - 1]);
+  const bought = () => (st.rtMode === 'first' ? 'the first ' + int(st.rtN) + ' retweets of each' : st.rtMode === 'sample' ? 'a random ' + Math.round(100 * st.rtRate) + '% of their retweets' : '');
+  function recipe(r, hasT1, hasT2) {
+    const ages = passAges(), parts = ['Each day, search for roots posted ' + (ages.every((h) => h <= 72) ? list(ages.map(String)) + ' hours' : list(ages.map(ageTxt))) + ' earlier whose counts show ' + int(r.census) + '+ posts.',
+      'Start collecting a cascade the first time its count passes its size. Fetch its replies first: each carries its own counts, which gives the exact size.'];
+    if (hasT1) parts.push('For cascades of ' + int(st.full) + '+ posts, fetch every quote and retweet.');
+    if (hasT2) parts.push('For cascades of ' + int(r.rq) + '+ posts, fetch the quotes' + (st.rtMode === 'none' ? '; their retweets come from the 1% stream only.' : ' and ' + bought() + '.'));
+    parts.push('Check what search found against the 1% stream.');
     return parts.join(' ');
   }
 
   /* ====================================================================== figures */
-  function drawFlow(pop, r) {
+  function drawFlow(r, hasT1, hasT2, fits) {
     const host = document.getElementById('c-flow'), wide = host.clientWidth >= 820, BH = 90, uid = 'cf' + (drawFlow.n = (drawFlow.n || 0) + 1);
-    const col = r.total <= st.cap ? 'var(--ok)' : 'var(--over)';
+    const col = fits ? 'var(--ok)' : 'var(--over)', got = r.posts ? r.downloaded / r.posts : 0;
     const boxes = [
-      st.stream > 0 ? { title: streamName().replace(/^./, (c) => c.toUpperCase()), color: 'var(--ink-2)', lines: ['flags at the ' + (st.hits === 1 ? 'first' : st.hits + ordSuffix(st.hits)) + ' sampled post', pct(r.found) + ' of ' + int(st.cut) + '+ cascades', 'outside the cap'] }
-                    : { title: 'Search by repost count', color: 'var(--ink-2)', lines: ['roots near ' + int(st.cut / 2) + '+ posts', big(r.watched) + ' roots a month', 'costs ' + big(r.finding) + ' units'] },
-      { title: st.curves ? 'Check size, count curves' : 'Check the root’s counts', lines: ['daily lookups to day ' + st.days, st.curves ? 'minute curves, ' + big(r.curved) + ' cascades' : big(r.watched) + ' cascades watched', 'costs ' + big(r.checks + r.curves) + ' units'] },
-      { title: st.quotes ? 'Download replies, quotes' : 'Download replies', lines: [big(r.replies) + ' replies and roots', st.quotes ? big(r.quotes + r.under) + ' quotes' + (r.under > 0 ? ' and posts under' : '') : 'quotes left out', 'costs ' + big(r.replies + r.quotes + r.under) + ' units'] },
-      st.rtMode === 'none' ? { title: 'Retweets, not downloaded', dashed: true, lines: [st.stream > 0 ? big(r.sampledRt) + ' in the stream sample' : 'no sample without a stream', st.curves ? 'timing from count curves' : 'totals from daily lookups', 'costs nothing'] }
-                           : { title: st.rtMode === 'sample' ? 'Sample retweets' : 'Download retweets', color: TYPE.retweets, lines: [st.rtMode === 'all' ? 'every retweet' : st.rtMode === 'sample' ? 'a random ' + Math.round(100 * st.rtRate) + '% by stream rule' : 'first ' + int(st.rtN) + ' of each', st.rtShare < 0.995 ? 'for ' + Math.round(100 * st.rtShare) + '% of cascades' : 'for every cascade', 'costs ' + big(r.retweets) + ' units'] },
-      { title: 'Collected', color: col, fill: true, lines: [big(r.cascades) + ' cascades a month', pct(r.downloaded / r.allPosts) + ' of posts downloaded', big(r.total) + ' units, ' + pct(r.total / st.cap) + ' of cap'] },
+      { title: 'Search by counts', color: TIER.census, lines: [st.passes === 1 ? 'one pass, at ' + ageTxt(passAges()[0]) : st.passes + ' passes, a day apart', big(r.roots) + ' roots of ' + int(r.census) + '+', 'costs ' + big(r.finding) + ' units'] },
+      { title: 'Replies first', lines: ['each reply carries its counts', big(r.replies) + ' replies', 'costs ' + big(r.replies) + ' units'] },
+      hasT1 ? { title: 'In full, ' + int(st.full) + '+', color: TIER.full, lines: ['every quote and retweet', big(r.n1) + ' cascades', 'costs ' + big(r.t1.quotes + r.t1.retweets) + ' units'] }
+            : { title: 'No cascade in full', dashed: true, lines: ['every retweet is too many', 'for any size chosen', 'costs nothing'] },
+      hasT2 ? { title: 'Quotes, ' + int(r.rq) + '+', color: TIER.rq, lines: [st.rtMode === 'none' ? 'retweets: 1% stream only' : st.rtMode === 'first' ? 'and first ' + int(st.rtN) + ' retweets' : 'and ' + Math.round(100 * st.rtRate) + '% of retweets', big(r.n2) + ' cascades', 'costs ' + big(r.t2.quotes + r.bought) + ' units'] }
+            : { title: 'No second tier', dashed: true, lines: ['replies and quotes only', 'for the cascades in full', 'costs nothing'] },
+      { title: 'Collected', color: col, fill: true, lines: [big(r.n1 + r.n2) + ' cascades a month', pct(got) + ' of their posts', big(r.total) + ' units, ' + pct(r.total / st.cap) + ' of cap'] },
     ];
-    const f = frame('c-flow', wide ? BH + 34 : boxes.length * BH + (boxes.length - 1) * 24 + 10, 'The cascade plan as a flow: find, check size, download replies and quotes, retweets, result');
+    const f = frame('c-flow', wide ? BH + 34 : boxes.length * BH + (boxes.length - 1) * 24 + 10, 'The plan as a flow: search by counts, replies first, leaves for each tier, result');
     const defs = el('defs', {}, f.svg), mk = el('marker', { id: uid, viewBox: '0 0 10 10', refX: 9, refY: 5, markerWidth: 7, markerHeight: 7, orient: 'auto-start-reverse' }, defs);
     el('path', { d: 'M0 0L10 5L0 10z', fill: 'var(--ink-3)' }, mk);
     const box = (b, x, y, w) => {
@@ -147,131 +139,181 @@
     };
     const arrow = (d) => el('path', { d, fill: 'none', stroke: 'var(--ink-3)', 'stroke-width': 1.25, 'marker-end': 'url(#' + uid + ')' }, f.svg);
     if (wide) {
-      const gap = 24, w = (f.w - 4 - gap * (boxes.length - 1)) / boxes.length, labels = ['FIND', 'CHECK SIZE', 'DOWNLOAD', 'RETWEETS', 'RESULT'];
+      const gap = 24, w = (f.w - 4 - gap * (boxes.length - 1)) / boxes.length, labels = ['FIND', 'SIZE', 'TIER 1', 'TIER 2', 'RESULT'];
       boxes.forEach((b, i) => { const x = 2 + i * (w + gap); box(b, x, 6, w); if (i) arrow('M' + (x - gap + 2) + ' ' + (6 + BH / 2) + 'H' + x); el('text', { x: x + 2, y: 6 + BH + 16, class: 'tick' }, f.svg, labels[i]); });
     } else boxes.forEach((b, i) => { const y = 4 + i * (BH + 24); box(b, 2, y, f.w - 4); if (i) arrow('M' + f.w / 2 + ' ' + (y - 21) + 'V' + (y - 1)); });
   }
-  const low = (t) => t.charAt(0).toLowerCase() + t.slice(1);
-  const ordSuffix = (h) => (h === 2 ? 'nd' : h === 3 ? 'rd' : 'th');
 
-  function drawMix(pop, r) {
-    const rows = [
-      ['Retweets', r.allRt, r.retweets, TYPE.retweets, st.rtMode === 'none' ? (st.stream > 0 ? 'stream sample' : 'none seen') + (st.curves ? ', timing from counts' : ', totals from lookups') : pct(r.retweets / r.allRt) + ' downloaded' + (st.curves ? ', timing of all from counts' : '')],
-      ['Replies and roots', r.replies, r.replies, TYPE.replies, 'downloaded in full'],
-      ['Quotes', (pop.Q(st.cut)) * r.found, r.quotes, TYPE.quotes, st.quotes ? 'downloaded in full' : 'left out'],
-    ];
-    const rowH = 46, f = frame('c-mix', rows.length * rowH + 34, 'Posts in the cascades collected, by kind, and how many of each are downloaded');
-    const wide = f.w >= 620, m = { l: wide ? 140 : 4, r: wide ? 250 : 70, t: 4 }, x0 = m.l, x1 = f.w - m.r, max = Math.max.apply(null, rows.map((x) => x[1])), X = lin(0, max, x0, x1), yb = m.t + rows.length * rowH;
-    rows.forEach(([name, all, got, col, note], i) => {
-      const y = m.t + i * rowH, top = y + (wide ? 10 : 18);
-      el('text', { x: wide ? x0 - 12 : x0, y: wide ? top + 15 : y + 12, 'text-anchor': wide ? 'end' : 'start', class: 'strong' }, f.svg, name);
+  function drawCap(r, fits) {
+    const segs = [['Cascades in full', r.cost1, TIER.full], ['Replies and quotes', r.cost2, TIER.rq], ['Retweets bought', r.bought, TIER.bought], ['Search by counts', r.finding, TIER.census], ['Reserve', st.reserve, TIER.reserve]].filter((x) => x[1] > 0);
+    const f = frame('c-cap', 86, 'Units a month by use, against the cap'), x0 = 2, x1 = f.w - 2, used = r.total + st.reserve, max = Math.max(st.cap, used) * 1.02, X = lin(0, max, x0, x1), y = 30, h = 26;
+    el('rect', { x: x0, y, width: X(st.cap) - x0, height: h, rx: 4, fill: 'var(--sunken)' }, f.svg);
+    let at = 0;
+    segs.forEach(([name, v, col]) => {
+      const a = X(at), b = X(at + v), w = Math.max(1.5, b - a - 2);
+      const bar = el('rect', { x: a, y, width: w, height: h, rx: 3, fill: col, 'fill-opacity': name === 'Reserve' ? 0.45 : 1 }, f.svg);
+      if (w > 86) el('text', { x: a + 2, y: y - 7, class: 'strong' }, f.svg, big(v));
+      bar.addEventListener('pointermove', (ev) => { const bb = f.svg.getBoundingClientRect(); f.showTip(ev.clientX - bb.left, ev.clientY - bb.top, '<b>' + name + '</b>' + row(col, 'Units a month', big(v)) + row('', 'Share of the cap', pct(v / st.cap))); });
+      bar.addEventListener('pointerleave', f.hideTip);
+      at += v;
+    });
+    el('line', { x1: X(st.cap), x2: X(st.cap), y1: y - 22, y2: y + h + 6, stroke: 'var(--ink)', 'stroke-width': 1.5 }, f.svg);
+    el('text', { x: X(st.cap) - 6, y: y - 12, 'text-anchor': 'end', class: 'strong' }, f.svg, 'Cap ' + big(st.cap));
+    el('text', { x: x0, y: y + h + 20 }, f.svg, fits ? big(st.cap - used) + ' units to spare after the reserve' : big(used - st.cap) + ' units over the cap with the reserve');
+    legend('c-leg-cap', segs.map(([name, v, col]) => ['box', col, name, name === 'Reserve' ? 'opacity:.45' : '']));
+  }
+
+  function drawTiers(r, hasT1, hasT2) {
+    const rows = [];
+    if (hasT1) rows.push(['In full', int(st.full) + '+ posts', r.A, r.cost1, TIER.full, r.n1, 'every post']);
+    if (hasT2) rows.push(['Replies and quotes', int(r.rq) + ' to ' + (st.full === Infinity ? 'the largest' : int(st.full - 1)), r.B, r.cost2 + r.bought, TIER.rq, r.n2, st.rtMode === 'none' ? 'no retweets bought' : 'with ' + big(r.bought) + ' retweets']);
+    if (r.n3 > 0) rows.push(['Root and counts', int(r.census) + ' to ' + int(r.rq - 1), r.censusPosts, r.n3, TIER.census, r.n3, 'the root only']);
+    const rowH = 50, f = frame('c-mix', rows.length * rowH + 34, 'Posts in each tier and how many of them are downloaded');
+    const wide = f.w >= 620, m = { l: wide ? 150 : 4, r: wide ? 232 : 64, t: 4 }, x0 = m.l, x1 = f.w - m.r, max = Math.max.apply(null, rows.map((x) => x[2])), X = lin(0, max, x0, x1), yb = m.t + rows.length * rowH;
+    rows.forEach(([name, range, all, got, col, n, note], i) => {
+      const y = m.t + i * rowH, top = y + (wide ? 12 : 20);
+      el('text', { x: wide ? x0 - 12 : x0, y: wide ? top + 9 : y + 12, 'text-anchor': wide ? 'end' : 'start', class: 'strong' }, f.svg, name);
+      if (wide) el('text', { x: x0 - 12, y: top + 24, 'text-anchor': 'end' }, f.svg, range);
       el('rect', { x: x0, y: top, width: Math.max(1, X(all) - x0), height: 22, rx: 3, fill: col, 'fill-opacity': 0.16 }, f.svg);
-      if (got > 0) el('rect', { x: x0, y: top, width: Math.max(1.5, X(got) - x0), height: 22, rx: 3, fill: col }, f.svg);
-      const t = el('text', { x: X(all) + 8, y: top + 15 }, f.svg); el('tspan', { class: 'strong', style: 'fill:var(--ink)' }, t, big(all)); if (wide) el('tspan', {}, t, '  ' + note);
+      el('rect', { x: x0, y: top, width: Math.max(1.5, X(got) - x0), height: 22, rx: 3, fill: col }, f.svg);
+      const t = el('text', { x: X(all) + 8, y: top + 15 }, f.svg); el('tspan', { class: 'strong', style: 'fill:var(--ink)' }, t, big(all)); if (wide) el('tspan', {}, t, '  ' + big(n) + ' cascades, ' + note);
       const hit = el('rect', { x: 0, y, width: f.w, height: rowH, fill: 'transparent' }, f.svg);
-      hit.addEventListener('pointermove', (ev) => { const b = f.svg.getBoundingClientRect(); f.showTip(ev.clientX - b.left, ev.clientY - b.top, '<b>' + name + '</b>' + row('', 'In the cascades collected', big(all)) + row('', 'Downloaded', big(got) + ' · ' + pct(all ? got / all : 0)) + (name === 'Retweets' && st.stream > 0 ? row('', 'Seen in the stream sample', big(r.sampledRt)) : '')); });
+      hit.addEventListener('pointermove', (ev) => { const b = f.svg.getBoundingClientRect(); f.showTip(ev.clientX - b.left, ev.clientY - b.top, '<b>' + name + ' · ' + range + '</b>' + row('', 'Cascades a month', big(n)) + row('', 'Posts in them', big(all)) + row(col, 'Downloaded', big(got) + ' · ' + pct(all ? got / all : 0))); });
       hit.addEventListener('pointerleave', f.hideTip);
     });
     el('line', { x1: x0, x2: x1, y1: yb, y2: yb, stroke: 'var(--line-2)' }, f.svg);
     const step = U.niceStep(max / 4);
     for (let v = 0; v <= max * 1.001; v += step) { el('line', { x1: X(v), x2: X(v), y1: yb, y2: yb + 5, stroke: 'var(--line-2)' }, f.svg); el('text', { x: X(v), y: yb + 18, 'text-anchor': v === 0 ? 'start' : 'middle', class: 'tick' }, f.svg, v === 0 ? '0' : big(v)); }
     el('text', { x: x1, y: f.h - 2, 'text-anchor': 'end' }, f.svg, 'posts a month');
-    legend('c-leg-mix', [['box', 'var(--ink-2)', 'Downloaded'], ['box', 'var(--ink-2)', 'Not downloaded', 'opacity:.2']]);
+    legend('c-leg-mix', [['box', 'var(--ink-2)', 'Downloaded'], ['box', 'var(--ink-2)', 'In the tier, not downloaded', 'opacity:.2']]);
   }
 
-  function drawFit(pop, r) {
-    const f = frame('c-fit', 310, 'Units a month needed against the smallest cascade collected, for four plans');
-    const m = { l: 46, r: 16, t: 20, b: 42 }, x0 = m.l, x1 = f.w - m.r, y0 = f.h - m.b, y1 = m.t, lo = 200, hi = 200000;
-    const series = [
-      ['Replies only', TYPE.replies, 1.75, { quotes: false, rtMode: 'none' }],
-      ['Replies and quotes', TYPE.quotes, 1.75, { quotes: true, rtMode: 'none' }],
-      ['Every post', TYPE.retweets, 1.75, { quotes: true, rtMode: 'all', rtShare: 1 }],
-      ['Your plan', 'var(--ink)', 2.75, {}],
-    ];
-    const xs = []; for (let i = 0; i <= 90; i++) xs.push(lo * Math.pow(hi / lo, i / 90));
-    const vals = series.map((s) => xs.map((x) => CASCADE.plan(pop, opts(Object.assign({ cut: x }, s[3]))).total));
-    let vmin = Infinity, vmax = 0; vals.forEach((v) => v.forEach((y) => { if (y < vmin) vmin = y; if (y > vmax) vmax = y; }));
-    const X = logS(lo, hi, x0, x1), Y = logS(Math.min(vmin, st.cap) / 1.5, Math.max(vmax, st.cap) * 1.5, y0, y1);
+  function drawFit(r, hasT2) {
+    const f = frame('c-fit', 330, 'Units a month against the smallest cascade collected, with the measured sizes');
+    const m = { l: 46, r: 16, t: 20, b: 42 }, x0 = m.l, x1 = f.w - m.r, y0 = f.h - m.b, y1 = m.t, lo = 100, hi = 100000;
+    const every = (s) => pop.P(s), rq = (s) => (1 - st.rt) * pop.P(s), mine = (s) => CASCADE.plan(pop, opts({ rq: s })).total;
+    const xs = []; for (let i = 0; i <= 120; i++) xs.push(lo * Math.pow(hi / lo, i / 120));
+    const mineXs = xs.filter((x) => x >= st.census && x <= top2());
+    const all = xs.map(every).concat(xs.map(rq), [st.cap]), X = logS(lo, hi, x0, x1), Y = logS(Math.min.apply(null, all) / 1.4, Math.max.apply(null, all) * 1.4, y0, y1);
     el('rect', { x: x0, y: y1, width: x1 - x0, height: Math.max(0, Y(st.cap) - y1), fill: 'var(--over)', 'fill-opacity': 0.05 }, f.svg);
+    el('rect', { x: x0, y: y1, width: X(1000) - x0, height: y0 - y1, fill: 'var(--sunken)', 'fill-opacity': 0.7 }, f.svg);
+    el('text', { x: x0 + 8, y: y0 - 10 }, f.svg, 'below 1,000: rough');
     for (const v of logTicks(Y.inv(y0), Y.inv(y1))) { el('line', { x1: x0, x2: x1, y1: Y(v), y2: Y(v), stroke: 'var(--grid)' }, f.svg); el('text', { x: x0 - 8, y: Y(v) + 4, 'text-anchor': 'end', class: 'tick' }, f.svg, big(v)); }
-    for (const v of [200, 1000, 10000, 100000]) { el('line', { x1: X(v), x2: X(v), y1: y0, y2: y0 + 5, stroke: 'var(--line-2)' }, f.svg); el('text', { x: X(v), y: y0 + 18, 'text-anchor': 'middle', class: 'tick' }, f.svg, int(v)); }
+    for (const v of [100, 1000, 10000, 100000]) { el('line', { x1: X(v), x2: X(v), y1: y0, y2: y0 + 5, stroke: 'var(--line-2)' }, f.svg); el('text', { x: X(v), y: y0 + 18, 'text-anchor': v === hi ? 'end' : 'middle', class: 'tick' }, f.svg, int(v)); }
     el('line', { x1: x0, x2: x1, y1: y0, y2: y0, stroke: 'var(--line-2)' }, f.svg);
     el('text', { x: (x0 + x1) / 2, y: f.h - 6, 'text-anchor': 'middle' }, f.svg, 'Smallest cascade collected, in posts (log scale)');
     el('line', { x1: x0, x2: x1, y1: Y(st.cap), y2: Y(st.cap), stroke: 'var(--ink)', 'stroke-width': 1.25 }, f.svg);
     el('text', { x: x1 - 4, y: Y(st.cap) - 6, 'text-anchor': 'end', class: 'strong' }, f.svg, 'Cap ' + big(st.cap));
-    series.forEach((s, i) => el('path', { d: path(xs.map((x, k) => [X(x), Y(vals[i][k])])), fill: 'none', stroke: s[1], 'stroke-width': s[2], 'stroke-linejoin': 'round' }, f.svg));
-    el('circle', { cx: X(st.cut), cy: Y(r.total), r: 5.5, fill: 'var(--surface)', stroke: 'var(--ink)', 'stroke-width': 2.5 }, f.svg);
+    if (st.reserve > 0 && budget() > 0) el('line', { x1: x0, x2: x1, y1: Y(budget()), y2: Y(budget()), stroke: 'var(--ink-3)', 'stroke-dasharray': '4 4' }, f.svg);
+    const line = (pts, col, w) => el('path', { d: path(pts), fill: 'none', stroke: col, 'stroke-width': w, 'stroke-linejoin': 'round' }, f.svg);
+    line(xs.map((x) => [X(x), Y(every(x))]), TIER.full, 2); line(xs.map((x) => [X(x), Y(rq(x))]), TIER.rq, 2);
+    if (mineXs.length > 1) line(mineXs.map((x) => [X(x), Y(mine(x))]), 'var(--ink)', 2.75);
+    D.S.forEach((s) => [[every, TIER.full], [rq, TIER.rq]].forEach(([fn, col]) => el('circle', { cx: X(s), cy: Y(fn(s)), r: 4.5, fill: col, stroke: 'var(--surface)', 'stroke-width': 2 }, f.svg)));
+    if (st.full !== Infinity) { el('line', { x1: X(st.full), x2: X(st.full), y1: y1, y2: y0, stroke: TIER.full, 'stroke-dasharray': '2 4' }, f.svg); el('text', { x: X(st.full) + 6, y: y1 + 8, style: 'fill:var(--ink)' }, f.svg, 'in full from ' + int(st.full)); }
+    if (hasT2) el('circle', { cx: X(r.rq), cy: Y(r.total), r: 5.5, fill: 'var(--surface)', stroke: 'var(--ink)', 'stroke-width': 2.5 }, f.svg);
     const cross = el('line', { y1: y1, y2: y0, stroke: 'var(--ink-3)', visibility: 'hidden' }, f.svg), ov = el('rect', { x: x0, y: y1, width: x1 - x0, height: y0 - y1, fill: 'transparent' }, f.svg);
     ov.addEventListener('pointermove', (ev) => {
-      const b = f.svg.getBoundingClientRect(), px = (ev.clientX - b.left) * f.w / b.width, s = X.inv(px);
+      const b = f.svg.getBoundingClientRect(), px = (ev.clientX - b.left) * f.w / b.width, s = +X.inv(px).toPrecision(2);
       cross.setAttribute('x1', px); cross.setAttribute('x2', px); cross.setAttribute('visibility', 'visible');
-      f.showTip(px * b.width / f.w, ev.clientY - b.top, '<b>Cascades of ' + int(+s.toPrecision(2)) + '+ posts</b>' + row('', 'How many a month', big(pop.N(s)))
-        + series.map((q) => row(q[1], q[0], big(CASCADE.plan(pop, opts(Object.assign({ cut: s }, q[3]))).total) + ' units')).join(''));
+      f.showTip(px * b.width / f.w, ev.clientY - b.top, '<b>Cascades of ' + int(s) + '+ posts' + (s < 1000 ? ' (rough)' : '') + '</b>' + row('', 'How many a month', big(pop.N(s)))
+        + row(TIER.full, 'Every post', big(every(s)) + ' units') + row(TIER.rq, 'Replies and quotes', big(rq(s)) + ' units')
+        + (s >= st.census && s <= top2() ? row('var(--ink)', 'Your plan, second tier from here', big(mine(s)) + ' units') : ''));
     });
     ov.addEventListener('pointerleave', () => { cross.setAttribute('visibility', 'hidden'); f.hideTip(); });
-    legend('c-leg-fit', series.map((s) => ['', s[1], s[0]]));
+    legend('c-leg-fit', [['', TIER.full, 'Every post, from this size up'], ['', TIER.rq, 'Replies and quotes, from this size up'], ['', 'var(--ink)', 'Your plan, as its second tier reaches lower'], ['dot', 'var(--ink-2)', 'Measured']]);
   }
 
-  function drawFind(pop, r) {
-    const f = frame('c-find', 310, 'Chance that the stream flags a cascade, by its size');
-    if (!(st.stream > 0)) { document.getElementById('c-leg-find').innerHTML = ''; f.svg.setAttribute('viewBox', '0 0 ' + f.w + ' 10'); return; }
-    const m = { l: 44, r: 16, t: 20, b: 42 }, x0 = m.l, x1 = f.w - m.r, y0 = f.h - m.b, y1 = m.t, X = logS(10, 10000, x0, x1), Y = lin(0, 1, y0, y1);
+  function drawGrow() {
+    const f = frame('c-grow', 310, 'Median share of the seven-day size reached, by hours since the root, for three size classes');
+    const m = { l: 44, r: 16, t: 24, b: 42 }, x0 = m.l, x1 = f.w - m.r, y0 = f.h - m.b, y1 = m.t, X = logS(1, 168, x0, x1), Y = lin(0, 1, y0, y1), G = D.growth, names = Object.keys(G).filter((k) => k !== 'hours');
     for (const v of [0, 0.25, 0.5, 0.75, 1]) { el('line', { x1: x0, x2: x1, y1: Y(v), y2: Y(v), stroke: 'var(--grid)' }, f.svg); el('text', { x: x0 - 8, y: Y(v) + 4, 'text-anchor': 'end', class: 'tick' }, f.svg, Math.round(100 * v) + '%'); }
-    for (const v of [10, 100, 1000, 10000]) { el('line', { x1: X(v), x2: X(v), y1: y0, y2: y0 + 5, stroke: 'var(--line-2)' }, f.svg); el('text', { x: X(v), y: y0 + 18, 'text-anchor': 'middle', class: 'tick' }, f.svg, int(v)); }
+    for (const v of [1, 3, 6, 12, 24, 48, 72, 168]) { el('line', { x1: X(v), x2: X(v), y1: y0, y2: y0 + 5, stroke: 'var(--line-2)' }, f.svg); el('text', { x: X(v), y: y0 + 18, 'text-anchor': v === 168 ? 'end' : 'middle', class: 'tick' }, f.svg, String(v)); }
+    el('line', { x1: x0, x2: x1, y1: y0, y2: y0, stroke: 'var(--line-2)' }, f.svg);
+    el('text', { x: (x0 + x1) / 2, y: f.h - 6, 'text-anchor': 'middle' }, f.svg, 'Hours since the root was posted (log scale)');
+    passAges().forEach((h, i) => { el('line', { x1: X(h), x2: X(h), y1: y1 - 6, y2: y0, stroke: 'var(--ink)', 'stroke-width': 1.25, 'stroke-dasharray': '2 4' }, f.svg); el('text', { x: X(h) - 5, y: y1 - 10, 'text-anchor': 'end', class: 'strong' }, f.svg, (i ? '' : 'pass ') + (i + 1)); });
+    const hrs = G.hours.concat([168]);
+    names.forEach((k, i) => { const v = G[k].concat([1]); el('path', { d: path(hrs.map((h, j) => [X(h), Y(v[j])])), fill: 'none', stroke: KIND[i], 'stroke-width': 2, 'stroke-linejoin': 'round' }, f.svg);
+      G.hours.forEach((h, j) => el('circle', { cx: X(h), cy: Y(v[j]), r: 4, fill: KIND[i], stroke: 'var(--surface)', 'stroke-width': 2 }, f.svg)); });
+    const cross = el('line', { y1: y1, y2: y0, stroke: 'var(--ink-3)', visibility: 'hidden' }, f.svg), ov = el('rect', { x: x0, y: y1, width: x1 - x0, height: y0 - y1, fill: 'transparent' }, f.svg);
+    ov.addEventListener('pointermove', (ev) => {
+      const b = f.svg.getBoundingClientRect(), px = (ev.clientX - b.left) * f.w / b.width; let j = 0; G.hours.forEach((h, q) => { if (Math.abs(X(h) - px) < Math.abs(X(G.hours[j]) - px)) j = q; });
+      cross.setAttribute('x1', X(G.hours[j])); cross.setAttribute('x2', X(G.hours[j])); cross.setAttribute('visibility', 'visible');
+      f.showTip(X(G.hours[j]) * b.width / f.w, ev.clientY - b.top, '<b>' + G.hours[j] + (G.hours[j] === 1 ? ' hour' : ' hours') + ' after the root</b>' + names.map((k, i) => row(KIND[i], k + ' posts', 'about ' + Math.round(100 * G[k][j]) + '%')).join(''));
+    });
+    ov.addEventListener('pointerleave', () => { cross.setAttribute('visibility', 'hidden'); f.hideTip(); });
+    legend('c-leg-grow', names.map((k, i) => ['', KIND[i], k + ' posts']));
+  }
+
+  function drawFind() {
+    const f = frame('c-find', 310, 'Chance that a cascade is found, by its size: the 1% stream against search by counts');
+    const m = { l: 44, r: 16, t: 24, b: 42 }, x0 = m.l, x1 = f.w - m.r, y0 = f.h - m.b, y1 = m.t, X = logS(10, 10000, x0, x1), Y = lin(0, 1, y0, y1);
+    for (const v of [0, 0.25, 0.5, 0.75, 1]) { el('line', { x1: x0, x2: x1, y1: Y(v), y2: Y(v), stroke: 'var(--grid)' }, f.svg); el('text', { x: x0 - 8, y: Y(v) + 4, 'text-anchor': 'end', class: 'tick' }, f.svg, Math.round(100 * v) + '%'); }
+    for (const v of [10, 100, 1000, 10000]) { el('line', { x1: X(v), x2: X(v), y1: y0, y2: y0 + 5, stroke: 'var(--line-2)' }, f.svg); el('text', { x: X(v), y: y0 + 18, 'text-anchor': v === 10000 ? 'end' : 'middle', class: 'tick' }, f.svg, int(v)); }
     el('line', { x1: x0, x2: x1, y1: y0, y2: y0, stroke: 'var(--line-2)' }, f.svg);
     el('text', { x: (x0 + x1) / 2, y: f.h - 6, 'text-anchor': 'middle' }, f.svg, 'Cascade size, in posts (log scale)');
-    if (st.cut <= 10000) { el('line', { x1: X(st.cut), x2: X(st.cut), y1: y1 - 4, y2: y0, stroke: 'var(--ink)', 'stroke-width': 1.25 }, f.svg); el('text', { x: X(st.cut) - 6, y: y1 + 8, 'text-anchor': 'end', class: 'strong' }, f.svg, int(st.cut) + '+'); }
     const xs = []; for (let i = 0; i <= 120; i++) xs.push(10 * Math.pow(1000, i / 120));
-    const hs = [1, 2, 3].includes(st.hits) ? [1, 2, 3] : [1, 3, st.hits];
-    hs.forEach((h) => el('path', { d: path(xs.map((x) => [X(x), Y(CASCADE.binomSf(h, Math.round(x), st.stream))])), fill: 'none', stroke: h === st.hits ? 'var(--ink)' : 'var(--ref)', 'stroke-width': h === st.hits ? 2.75 : 1.5, 'stroke-dasharray': h === st.hits ? null : '5 4' }, f.svg));
+    const series = [[1, 'var(--ink)', 2.75, null], [3, 'var(--ref)', 1.5, '5 4']];
+    series.forEach(([h, col, w, dash]) => el('path', { d: path(xs.map((x) => [X(x), Y(CASCADE.binomSf(h, Math.round(x), st.stream))])), fill: 'none', stroke: col, 'stroke-width': w, 'stroke-dasharray': dash }, f.svg));
+    el('path', { d: 'M' + X(st.census) + ' ' + y0 + 'V' + Y(1) + 'H' + x1, fill: 'none', stroke: TIER.census, 'stroke-width': 2.75, 'stroke-linejoin': 'round' }, f.svg);
+    el('text', { x: X(st.census) + 8, y: Y(1) - 8, class: 'strong' }, f.svg, 'search by counts, from ' + int(st.census));
     const cross = el('line', { y1: y1, y2: y0, stroke: 'var(--ink-3)', visibility: 'hidden' }, f.svg), ov = el('rect', { x: x0, y: y1, width: x1 - x0, height: y0 - y1, fill: 'transparent' }, f.svg);
     ov.addEventListener('pointermove', (ev) => {
       const b = f.svg.getBoundingClientRect(), px = (ev.clientX - b.left) * f.w / b.width, s = Math.round(X.inv(px));
       cross.setAttribute('x1', px); cross.setAttribute('x2', px); cross.setAttribute('visibility', 'visible');
-      f.showTip(px * b.width / f.w, ev.clientY - b.top, '<b>A cascade of ' + int(s) + ' posts</b>' + row('', 'Posts in the stream, on average', (s * st.stream).toFixed(1)) + hs.map((h) => row(h === st.hits ? 'var(--ink)' : 'var(--ref)', 'Flagged at ' + h + (h === 1 ? ' post' : ' posts'), pct(CASCADE.binomSf(h, s, st.stream)))).join(''));
+      f.showTip(px * b.width / f.w, ev.clientY - b.top, '<b>A cascade of ' + int(s) + ' posts</b>' + row(TIER.census, 'Search by counts', s >= st.census ? 'found' : 'below the size searched')
+        + series.map(([h, col]) => row(col, 'Stream, ' + h + (h === 1 ? ' sampled post' : ' sampled posts'), pct(CASCADE.binomSf(h, s, st.stream)))).join(''));
     });
     ov.addEventListener('pointerleave', () => { cross.setAttribute('visibility', 'hidden'); f.hideTip(); });
-    legend('c-leg-find', hs.map((h) => ['', h === st.hits ? 'var(--ink)' : 'var(--ref)', 'Flagged at ' + h + (h === 1 ? ' sampled post' : ' sampled posts') + (h === st.hits ? ' (your setting)' : '')]));
+    legend('c-leg-find', [['', TIER.census, 'Search by counts'], ['', 'var(--ink)', '1% stream, one sampled post'], ['', 'var(--ref)', '1% stream, three sampled posts']]);
   }
 
   /* ====================================================================== render */
   function render() {
-    const pop = CASCADE.population(st), o = opts(), r = CASCADE.plan(pop, o), fits = r.total <= st.cap, sizeTxt = int(st.cut) + '+ posts';
-    const reach = CASCADE.reach(pop, o, st.cap), reachTxt = reach == null ? null : int(+reach.toPrecision(2));
+    if (!pop) derive();
+    const r = CASCADE.plan(pop, opts()), hasT1 = st.full !== Infinity, hasT2 = r.rq < top2() || !hasT1, fits = r.total <= budget() + 1, S = D.streamOnly;
     document.getElementById('c-facts').innerHTML = [
-      ['Mean size of a 1,000+ cascade', int(pop.mean) + ' posts'],
+      ['Cascades of 1,000+ a month', big(pop.N(1000))],
+      ['Posts in them', big(pop.P(1000))],
       ['Cascades of 10,000+ a month', big(pop.N(10000))],
-      ['Posts in cascades of 10,000+', pct(pop.P(10000) / pop.P(1000)) + ' of the total'],
-      [big(st.nAll) + ' cascades means sizes from', 'about ' + int(+pop.floorOfAll.toPrecision(2)) + ' posts'],
+      ['Their share of those posts', pct(pop.P(10000) / pop.P(1000))],
+      ['Cascades of 100+ a month, rough', big(pop.N(100))],
     ].map(([k, v]) => '<dt>' + k + '</dt><dd>' + v + '</dd>').join('');
     const pill = document.getElementById('c-pill'); pill.className = 'pill ' + (fits ? 'ok' : 'short'); pill.textContent = fits ? 'Fits the cap' : 'Over the cap';
-    const who = r.found < 0.995 ? 'the ' + pct(r.found) + ' of cascades of ' + sizeTxt + ' that the stream flags' : 'every cascade of ' + sizeTxt;
-    document.getElementById('c-headline').textContent = fits
-      ? 'Collecting ' + low(what()) + ' for ' + who + ' costs ' + big(r.total) + ' units a month, ' + pct(r.total / st.cap) + ' of the cap.'
-      : 'Collecting ' + low(what()) + ' for ' + who + ' needs ' + big(r.total) + ' units a month, ' + (r.total / st.cap).toFixed(1) + ' times the cap.';
-    document.getElementById('c-recipe').textContent = recipe(r) + (fits ? '' : reachTxt ? ' This plan fits the cap for cascades of about ' + reachTxt + '+ posts.' : ' This plan does not fit the cap at any size.');
+    const rqWords = st.rtMode === 'first' ? 'replies, quotes and first ' + int(st.rtN) + ' retweets' : st.rtMode === 'sample' ? 'replies, quotes and a random ' + Math.round(100 * st.rtRate) + '% of the retweets' : 'replies and quotes';
+    const subject = hasT1 && hasT2 ? 'Every post of the ' + big(r.n1) + ' cascades of ' + int(st.full) + '+ posts, and the ' + rqWords + ' of ' + big(r.n2) + ' more down to ' + int(r.rq) + ' posts,'
+      : hasT1 ? 'Every post of the ' + big(r.n1) + ' cascades of ' + int(st.full) + '+ posts'
+      : 'The ' + rqWords + ' of the ' + big(r.n2) + ' cascades of ' + int(r.rq) + '+ posts';
+    const plural = hasT2;
+    document.getElementById('c-headline').textContent = subject + (fits ? (plural ? ' cost ' : ' costs ') + big(r.total) + ' units a month, ' + pct(r.total / st.cap) + ' of the cap.'
+      : (plural ? ' need ' : ' needs ') + big(r.total) + ' units a month, ' + (budget() > 0 ? 'more than the ' + big(budget()) + ' available.' : 'and the reserve takes the whole cap.'));
+    let fix = '';
+    if (!fits) {
+      const e = CASCADE.lowest(pop, opts(), 'rq', budget(), st.census, top2()), g = CASCADE.lowest(pop, opts({ rq: Infinity }), 'full', budget(), 1000, 1e6);
+      fix = e != null ? ' Replies and quotes fit from about ' + int(roundUp(e)) + '+ posts.' : g != null ? ' Every post alone fits only from about ' + int(roundUp(g)) + '+ posts.' : '';
+    }
+    if (hasT2 && r.rq < 1000) fix += ' Sizes below 1,000 posts are rough.';
+    document.getElementById('c-recipe').textContent = recipe(r, hasT1, hasT2) + fix;
     const k = [
-      ['Cascades collected a month', big(r.cascades), st.stream > 0 ? pct(r.found) + ' of the ' + big(pop.N(st.cut)) + ' with ' + sizeTxt + ' are flagged' : 'all ' + big(pop.N(st.cut)) + ' with ' + sizeTxt],
-      ['Units spent a month', big(r.total), pct(r.total / st.cap) + ' of the cap; ' + big(Math.max(0, st.cap - r.total)) + ' to spare'],
-      ['Share of their posts downloaded', pct(r.downloaded / r.allPosts), big(r.downloaded) + ' of ' + big(r.allPosts) + ' posts'],
-      ['Retweeters seen', big(r.sampledRt + r.retweets), (st.stream > 0 ? big(r.sampledRt) + ' in the ' + (100 * st.stream) + '% stream, outside the cap' : 'no stream') + (r.retweets > 0 ? '; ' + big(r.retweets) + ' bought' : '') + '; of ' + big(r.allRt) + ' retweets'],
+      ['Cascades collected in full', hasT1 ? big(r.n1) : 'none', hasT1 ? int(st.full) + '+ posts; ' + big(r.cost1) + ' units' : 'no size chosen'],
+      ['With replies and quotes only', hasT2 ? big(r.n2) : 'none', hasT2 ? 'down to ' + int(r.rq) + ' posts; ' + big(r.cost2 + r.bought) + ' units' : 'no second tier'],
+      ['Units spent a month', big(r.total), pct(r.total / st.cap) + ' of the cap' + (st.reserve ? '; ' + big(st.reserve) + ' in reserve' : '')],
+      ['Reply trees, against the stream-only design', (r.n1 + r.n2) / S.cascades >= 1.5 ? Math.round((r.n1 + r.n2) / S.cascades) + ' times' : ((r.n1 + r.n2) / S.cascades).toFixed(1) + ' times', 'which collects ' + int(S.cascades) + ' cascades for ' + big(S.low) + ' to ' + big(S.high)],
     ];
     document.getElementById('c-kpis').innerHTML = k.map(([a, b, s]) => '<div class="kpi"><div class="k">' + a + '</div><div class="v">' + b + '</div><div class="s">' + s + '</div></div>').join('');
-    document.getElementById('c-sub-flow').textContent = 'The plan in the headline, step by step, in numbers a month. One unit is the charge for one post.';
-    document.getElementById('c-sub-mix').textContent = 'Posts in cascades of ' + sizeTxt + ', by kind. The solid part of each bar is downloaded. Retweets are ' + pct(r.allRt / r.allPosts) + ' of the posts, so they decide what fits.' + (st.curves ? ' Count curves give the minute-by-minute timing of every retweet without downloading any.' : '');
-    const fitAll = CASCADE.reach(pop, opts({ quotes: true, rtMode: 'all', rtShare: 1 }), st.cap), fitRQ = CASCADE.reach(pop, opts({ quotes: true, rtMode: 'none' }), st.cap);
-    document.getElementById('c-sub-fit').textContent = 'Units a month against the smallest cascade collected. Below the cap line fits. Replies and quotes fit from about ' + (fitRQ ? int(+fitRQ.toPrecision(2)) : '?') + '+ posts; every post fits only from about ' + (fitAll ? int(+fitAll.toPrecision(2)) : '?') + '+.';
-    document.getElementById('c-sub-find').textContent = st.stream > 0
-      ? 'The chance that the ' + streamName() + ' flags a cascade, by its size. A cascade of ' + int(st.cut) + ' posts puts about ' + (st.cut * st.stream).toFixed(st.cut * st.stream < 10 ? 1 : 0) + ' posts in the stream, and its first sampled post is, on average, about its ' + int(Math.round(1 / st.stream)) + 'th.'
-      : 'With no stream, cascades are found by searching for roots by repost count, which sees every root that passes the threshold but gives no sample of retweets.';
-    document.getElementById('c-foot-build').textContent = 'Cascade view, first version · 19 November 2026. The defaults are the figures given for a three-day window: ' + big(DEFAULTS.n1000) + ' cascades of 1,000+ posts a month holding ' + big(DEFAULTS.p1000) + ' posts, plus ' + big(DEFAULTS.q1000) + ' quotes; 85 to 89% of posts are retweets; a ' + big(DEFAULTS.cap) + ' cap; a 1% stream outside it.';
-    drawFlow(pop, r); drawMix(pop, r); drawFit(pop, r); drawFind(pop, r);
+    document.getElementById('c-sub-flow').textContent = 'The plan in the headline, step by step, in numbers a month. One unit is the charge for one post returned.';
+    document.getElementById('c-sub-mix').textContent = 'The bar shows where the cap goes. Below it, each tier’s posts, with the downloaded part solid. Retweets are ' + Math.round(100 * st.rt) + '% of posts, so collecting them for every cascade is what does not fit.';
+    const fitAll = CASCADE.lowest(pop, opts({ rq: Infinity, passes: 0 }), 'full', st.cap, 1000, 1e6), fitRQ = CASCADE.lowest(pop, opts({ full: Infinity, passes: 0 }), 'rq', st.cap, 100, 1e5);
+    document.getElementById('c-sub-fit').textContent = 'Units a month against the smallest cascade collected. Dots are the measured sizes. On their own, every post fits the cap from about ' + (fitAll ? int(roundUp(fitAll)) : '?') + '+ posts, and replies and quotes from about ' + (fitRQ ? int(roundUp(fitRQ)) + '+' + (fitRQ < 1000 ? ' (rough)' : '') : '?') + '. The black line is your plan as its second tier reaches lower.';
+    document.getElementById('c-sub-grow').textContent = 'Median share of a cascade’s seven-day size reached by each hour. Growth is about 99% done at 48 hours. Of the cascades that end at 10,000+ posts, ' + pct(D.passed10k[24]) + ' have passed 10,000 by 24 hours and ' + pct(D.passed10k[72]) + ' by 72, so search passes on actual counts need no prediction.';
+    document.getElementById('c-sub-find').textContent = 'The 1% stream notices a cascade only if one of its posts is sampled: ' + pct(CASCADE.binomSf(1, 100, st.stream)) + ' of the time at 100 posts. Search by counts returns every root at or above the size asked for, if most of a cascade’s size sits on its root.';
+    document.getElementById('c-foot-build').textContent = 'Cascade view, second version · 19 November 2026. Sizes were counted by Prof. Toyoda’s group on the full Japanese stream for September 2026: ' + int(D.N[0]) + ' cascades of 1,000+ posts holding ' + big(D.P[0]) + ' posts, ' + int(D.N[2]) + ' of 10,000+ holding ' + big(D.P[2]) + '.';
+    drawFlow(r, hasT1, hasT2, fits); drawCap(r, fits); drawTiers(r, hasT1, hasT2); drawFit(r, hasT2); drawGrow(); drawFind();
   }
 
   /* ====================================================================== view switch */
   const views = { cascades: document.getElementById('view-cascades'), trees: document.getElementById('view-trees') };
   const tabs = { cascades: document.getElementById('tab-cascades'), trees: document.getElementById('tab-trees') };
-  const INTRO = { cascades: 'Set what you know about the cap, the stream and how large cascades are. The results update as you move a control: what fits under the cap, what it costs, and what is left out.',
+  const INTRO = { cascades: 'Cascade sizes are measured counts for September 2026. Set the cap, the mix of posts and three sizes; the results update as you move a control: what fits under the cap, what it costs, and what is left out.',
                   trees: 'The reply part of a cascade, modelled in detail. Set your assumptions about replies on Japanese-language X, the quota and what you want to collect; the results update as you move a control.' };
   function show(v) {
     for (const k in views) { views[k].hidden = k !== v; tabs[k].setAttribute('aria-pressed', String(k === v)); }
