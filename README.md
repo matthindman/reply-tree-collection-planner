@@ -51,3 +51,10 @@ Examples of one-line changes: a new default quota (`CONFIG.defaults.quota`), a n
 Costs follow X's public price list and the assumptions in the left rail. Nothing has been tested on a
 paid account. The model is static: a conversation is judged on its final size. The default quota and
 monthly reply volume are placeholders.
+
+## Public copy
+
+The page is served at https://matthindman.github.io/reply-tree-collection-planner/ from the public
+repository `reply-tree-collection-planner`, which holds a copy of this folder (without `planner.html`).
+To update it after a change here: copy `README.md build.py index.html src data test` into a checkout of
+that repository, commit and push; GitHub Pages redeploys in about a minute.
