@@ -1,0 +1,80 @@
+<div class="page">
+  <header class="top">
+    <div>
+      <h1>Reply Tree Collection Planner</h1>
+      <p>Set what you believe about Japanese-language X, the contract and the research goal. Everything on the right updates as you move a control: what to collect, what it costs, and who the collection would miss.</p>
+    </div>
+    <div class="top-actions">
+      <span class="status" id="status"></span>
+      <button class="btn" id="btn-copy" type="button">Copy settings</button>
+      <button class="btn" id="btn-reset" type="button">Reset</button>
+    </div>
+  </header>
+
+  <div class="cols">
+    <aside class="rail" id="rail" aria-label="Assumptions"></aside>
+
+    <main class="results" id="results">
+      <section class="verdict" aria-live="polite">
+        <span class="pill ok" id="pill">Fits the quota</span>
+        <h2 id="headline">&nbsp;</h2>
+        <p class="recipe" id="recipe"></p>
+        <div class="kpis" id="kpis"></div>
+      </section>
+
+      <section class="card">
+        <h3>How the answer changes across the scenarios</h3>
+        <p class="sub" id="sub-range"></p>
+        <div class="scroll" id="range"></div>
+      </section>
+
+      <section class="card">
+        <h3>What each strategy buys</h3>
+        <p class="sub" id="sub-frontier"></p>
+        <div class="legend" id="leg-frontier"></div>
+        <div class="chart" id="ch-frontier"></div>
+      </section>
+
+      <div class="pair">
+        <section class="card">
+          <h3>Where the posts go</h3>
+          <p class="sub" id="sub-bars"></p>
+          <div class="legend" id="leg-bars"></div>
+          <div class="chart" id="ch-bars"></div>
+        </section>
+        <section class="card">
+          <h3>What a quota reaches</h3>
+          <p class="sub" id="sub-reach"></p>
+          <div class="chart" id="ch-reach"></div>
+        </section>
+      </div>
+
+      <section class="card">
+        <h3>Who gets collected, and who is missed</h3>
+        <p class="sub" id="sub-cover"></p>
+        <div class="legend" id="leg-cover"></div>
+        <div class="chart" id="ch-cover"></div>
+        <div class="chart" id="ch-shape" style="margin-top:14px"></div>
+        <p class="note" id="note-cover"></p>
+      </section>
+
+      <section class="card">
+        <h3>The population you are assuming</h3>
+        <p class="sub" id="sub-pop"></p>
+        <div class="legend" id="leg-pop"></div>
+        <div class="chart" id="ch-pop"></div>
+      </section>
+
+      <section class="foot">
+        <h3>How to read this</h3>
+        <ul>
+          <li>Conversations are drawn from the stochastic reply-tree model. The page opens on our best guess for Japanese X today: a full setting of that model that puts about 12% of replies in conversations of 100+ posts. The link between a conversation's size and its root's direct replies is the model's, not a measurement.</li>
+          <li>Costs follow X's public price list: one unit per post returned, with the count, stream and billing assumptions set in the rail. Nothing here has been tested on a paid account.</li>
+          <li>The model is static. A conversation is judged on its final size; waiting times, deletions and replies not tagged as Japanese are not modelled.</li>
+          <li>The best guess and its variants come from two independent desk analyses of late-2026 Japanese X (GPT Pro and Claude Opus). They agree on sizes and differ on how many large conversations are quiet-root. Neither is a measurement, and no post-2011 measurement of Japanese reply trees was found.</li>
+          <li id="foot-build"></li>
+        </ul>
+      </section>
+    </main>
+  </div>
+</div>

@@ -1,0 +1,237 @@
+{
+ "today": {
+  "label": "Best guess today",
+  "source": "GPT Pro preset (priors/gpt_pro_model_defaults.pdf): meets the targets both analyses share",
+  "params": {
+   "w": 0.9418,
+   "a1": 1.58,
+   "t1": 1.1264,
+   "a2": 0.1904,
+   "t2": 0.4392,
+   "alpha0": 3.3,
+   "b1": 0.13,
+   "b2": 0.055,
+   "c0": 0.45,
+   "c1": 0.85,
+   "s1": 1.65,
+   "g0": -2.7,
+   "mu": -0.47,
+   "gam": 0.21,
+   "sig": 0.98,
+   "tau": 0.49,
+   "f0": -1.9,
+   "f1": -0.13
+  }
+ },
+ "low": {
+  "label": "Low end",
+  "source": "Best guess with fewer popular roots; solved for 3.4% of replies in conversations of 100+",
+  "base": "today",
+  "knobs": {
+   "pop": 0.21
+  },
+  "solve": {
+   "knob": "pop",
+   "share100": 0.034,
+   "range": [
+    0.05,
+    1
+   ]
+  }
+ },
+ "high": {
+  "label": "High end",
+  "source": "Best guess with more popular roots; solved for 32% of replies in conversations of 100+",
+  "base": "today",
+  "knobs": {
+   "pop": 5.5
+  },
+  "solve": {
+   "knob": "pop",
+   "share100": 0.32,
+   "range": [
+    1,
+    12
+   ]
+  }
+ },
+ "quiet": {
+  "label": "More quiet-root",
+  "source": "Best guess with conversations differing more in persistence (GPT Pro sensitivity run: sig 0.98 to 1.13)",
+  "base": "today",
+  "knobs": {
+   "sigScale": 1.16
+  }
+ },
+ "opus": {
+  "label": "More root-driven",
+  "source": "Opus agent preset (priors/opus_model_defaults.md): six parameters changed from the Japan 2011 fit",
+  "params": {
+   "w": 0.9742,
+   "a1": 2.2448,
+   "t1": 0.0197,
+   "a2": -0.1356,
+   "t2": 0.4787,
+   "alpha0": 3.9669,
+   "b1": 0.0348,
+   "b2": 0.0354,
+   "c0": 0.8176,
+   "c1": 0.75,
+   "s1": 1.7833,
+   "g0": -2.7786,
+   "mu": -0.5277,
+   "gam": 0.3392,
+   "sig": 0.9015,
+   "tau": 0.3807,
+   "f0": -2.1084,
+   "f1": -0.487
+  }
+ },
+ "old_low": {
+  "label": "Low end (superseded 2026-11-19)",
+  "targets": {
+   "label": "Low end",
+   "share100": 0.034,
+   "share1000": 0.003,
+   "share10000": 0.0002,
+   "conv100": 120,
+   "driven": 0.6
+  },
+  "knobs": {
+   "lam": 1.32,
+   "dC0": -0.32,
+   "dMu": 0.08,
+   "sigScale": 1.2,
+   "dBranch": 0.3
+  },
+  "achieved": {
+   "share100": 0.028020232858370412,
+   "share1000": 0.004519381754665412,
+   "share10000": 0.0009175260466618005,
+   "conv100": 135.58866383245396,
+   "driven": 0.5698090769934994,
+   "conv": 245334.52044293875
+  },
+  "loss": 0.3035835553305082,
+  "skip": true
+ },
+ "old_opusCentral": {
+  "label": "Opus central (superseded 2026-11-19)",
+  "targets": {
+   "label": "Opus central",
+   "share100": 0.12,
+   "share1000": 0.03,
+   "share10000": 0.003,
+   "conv100": 350,
+   "driven": 0.85
+  },
+  "knobs": {
+   "lam": 1.6,
+   "dC0": -2.34,
+   "dMu": 0.18,
+   "sigScale": 1.13,
+   "dBranch": 0.59
+  },
+  "achieved": {
+   "share100": 0.10759668975972828,
+   "share1000": 0.04438681453257959,
+   "share10000": 0.016663596455656026,
+   "conv100": 314.0270043710913,
+   "driven": 0.8519658081218338,
+   "conv": 244578.31638029724
+  },
+  "loss": 0.32673018449485836,
+  "skip": true
+ },
+ "old_gptCentral": {
+  "label": "GPT central (superseded 2026-11-19)",
+  "targets": {
+   "label": "GPT central",
+   "share100": 0.12,
+   "share1000": 0.025,
+   "share10000": 0.003,
+   "conv100": 475,
+   "driven": 0.75
+  },
+  "knobs": {
+   "lam": 1.64,
+   "dC0": -0.07,
+   "dMu": 0.49,
+   "sigScale": 1.13,
+   "dBranch": -0.39
+  },
+  "achieved": {
+   "share100": 0.10558546819227424,
+   "share1000": 0.043844751013918486,
+   "share10000": 0.01749489609528985,
+   "conv100": 319.28631406601,
+   "driven": 0.7141465789729153,
+   "conv": 175687.8137006532
+  },
+  "loss": 0.7079035303039063,
+  "skip": true
+ },
+ "old_high": {
+  "label": "High end (superseded 2026-11-19)",
+  "targets": {
+   "share100": 0.34,
+   "share1000": 0.12,
+   "share10000": 0.025,
+   "conv100": 1300,
+   "driven": 0.9
+  },
+  "knobs": {
+   "lam": 1.94,
+   "dC0": -1.5,
+   "dMu": 0,
+   "sigScale": 1,
+   "dBranch": 0
+  },
+  "note": "set by hand: the automatic calibration did not finish; root reach is then tuned to the 34% target",
+  "skip": true
+ },
+ "old_interimPooled": {
+  "label": "Interim pooled calibration (superseded) (superseded 2026-11-19)",
+  "source": "pooled Opus and GPT Pro assessments (2026-11-19)",
+  "targets": {
+   "share100": 0.12,
+   "share1000": 0.0275,
+   "share10000": 0.003,
+   "conv100": 410,
+   "driven": 0.8,
+   "conv": 250000
+  },
+  "params": {
+   "w": 0.905939,
+   "a1": 1.57811,
+   "t1": 1.22344,
+   "a2": 0.243025,
+   "t2": 0.443835,
+   "alpha0": 3.96688,
+   "b1": 0.0347892,
+   "b2": 0.035352,
+   "c0": -0.00866413,
+   "c1": 1.46876,
+   "s1": 1.78331,
+   "g0": -2.834,
+   "mu": -0.108842,
+   "gam": 0.339219,
+   "sig": 1.06226,
+   "tau": 0.380676,
+   "f0": -2.16375,
+   "f1": -0.486963
+  },
+  "achieved": {
+   "share100": 0.11328740397179275,
+   "share1000": 0.023157697748195052,
+   "share10000": 0.0012189349553662723,
+   "conv100": 451.2834169355766,
+   "conv1000": 11.417857580314902,
+   "conv": 224524.25494234124,
+   "share20": 0.3278785211873271,
+   "driven": 0.8086601212739374
+  },
+  "loss": 0.05103964870134616,
+  "skip": true
+ }
+}
