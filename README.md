@@ -40,7 +40,7 @@ To change one, edit `data/scenarios.json`, then run `node data/make_scenarios.js
 
 1. Edit a file in `src/` (most changes are in `CONFIG` or `GROUPS` in `src/app.js`).
 2. Rebuild: `python3 build.py`
-3. Check: `node test/test_sim.js && node test/test_cost.js`
+3. Check: `node test/test_sim.js && node test/test_cost.js` (both exit non-zero if a check fails)
 4. Publish: push this folder to the public repository that serves the page (GitHub Pages serves `index.html`).
 
 Examples of one-line changes: a new default quota (`CONFIG.defaults.quota`), a new fitted model

@@ -6,7 +6,7 @@
 
   /* ====================================================================== CONFIG */
   const CONFIG = {
-    version: 'Draft 8 · 19 November 2026',
+    version: 'Draft 9 · 19 November 2026',
     // Fitted parameters of the reply-tree model (general_model/fits). Japan 2011 is the default.
     models: {
       // Best guess for Japanese X today: a full parameter set calibrated to the prior assessments (data/calibrate_today.js).
@@ -35,11 +35,11 @@
     // (src/ref_tables.js, src/scenario_tables.js) so it loads at once. The four prior scenarios are calibrated
     // to two independent assessments of late-2026 Japanese X (data/calibrate.js).
     scenarios: {
-      today: { label: 'Best guess for Japanese X today', table: 'today', primary: true, set: { mix: 0, replies: 5e8 }, note: 'Our best guess. Both desk analyses agree on its targets; this preset (from GPT Pro) meets them most closely.' },
-      low: { label: 'Low end', table: 'low', set: { mix: 0 }, note: 'Best guess with fewer popular roots: the low end of both 80% ranges.' },
-      high: { label: 'High end', table: 'high', set: { mix: 0 }, note: 'Best guess with more popular roots: the high end of both 80% ranges.' },
-      quiet: { label: 'Quiet-root', table: 'quiet', set: { mix: 0 }, note: 'Best guess with more persistent exchanges: about a third of large conversations are quiet-root.' },
-      opus: { label: 'Root-driven', table: 'opus', set: { mix: 0 }, note: 'The Opus analysis\u2019s preset: the same sizes, with seven in eight large conversations root-driven.' },
+      today: { label: 'Best guess for Japanese X today', table: 'today', primary: true, set: { mix: 0, replies: 5e8 }, note: 'A working guess, not a measurement: GPT Pro\u2019s preset, which comes closest to the targets the two desk analyses were given.' },
+      low: { label: 'Low end', table: 'low', set: { mix: 0 }, note: 'Best guess with fewer popular roots, near the low end of both analyses\u2019 ranges. It also has more quiet-root conversations.' },
+      high: { label: 'High end', table: 'high', set: { mix: 0 }, note: 'Best guess with more popular roots, near the high end of both analyses\u2019 ranges. It also has fewer quiet-root conversations.' },
+      quiet: { label: 'Quiet-root', table: 'quiet', set: { mix: 0 }, note: 'Best guess with conversations differing more in persistence: about a third of large conversations are quiet-root, and there are somewhat more of them.' },
+      opus: { label: 'Root-driven', table: 'opus', set: { mix: 0 }, note: 'The Opus analysis\u2019s own preset: similar concentration, fewer mid-sized conversations, and seven in eight large ones root-driven.' },
       japan2011: { label: 'Japan 2011', table: 'japan2011', set: { mix: 0 }, note: 'The model fitted to the published 2011 curves.' },
       usArchives: { label: 'US archives', table: 'japan2011', set: { mix: 100 }, note: 'The US news and election archives, selected by topic and account.' },
     },
@@ -70,7 +70,7 @@
   const pct = (x) => {
     if (x == null || !isFinite(x)) return '–';
     const v = 100 * x, a = Math.abs(v);
-    if (a >= 99.95 && a < 100) return '99.9%';
+    if (a >= 99.5 && a < 100) return (Math.floor(v * 10) / 10).toFixed(1) + '%';
     if (a >= 10) return v.toFixed(0) + '%';
     if (a >= 1) return v.toFixed(1) + '%';
     if (a >= 0.1) return v.toFixed(2) + '%';
@@ -114,31 +114,33 @@
         hint: 'Best guess and Opus are presets from today\u2019s two desk analyses. The other three are fits to older or targeted data.' },
       { key: 'mix', kind: 'range', label: 'Replies in broadcast-style conversation', min: 0, max: 100, step: 1, fmt: (v) => v + '%',
         hint: 'Blends in conversations like those in the US news and election archives.' },
-      { key: 'pop', kind: 'log', label: 'Roots in the popular group', min: 0.1, max: 10, fmt: () => pct(Math.min(0.95, Math.max(0.001, (1 - baseParams().w) * state.pop))),
+      { key: 'pop', kind: 'log', label: 'Roots in the popular group', min: 0.1, max: 6, fmt: () => pct(Math.min(0.95, Math.max(0.001, (1 - baseParams().w) * state.pop))),
         hint: 'Share of roots drawn from the broad group that supplies popular posts. The main control on concentration.' },
-      { key: 'lam', kind: 'range', label: 'Reach of the most popular posts', min: 0.6, max: 2.2, step: 0.02, fmt: (v) => '×' + v.toFixed(2),
+      { key: 'lam', kind: 'range', label: 'Reach of the most popular posts', min: 0.6, max: 1.6, step: 0.02, fmt: (v) => '×' + v.toFixed(2),
         hint: 'Stretches the tail of direct replies to a root.' },
-      { key: 'dC0', kind: 'range', label: 'Direct replies that get an answer', min: -3, max: 2, step: 0.05, fmt: () => pct(logistic(baseParams().c0 + state.dC0)),
-        hint: 'For a root with one reply and an average conversation.' },
-      { key: 'dMu', kind: 'range', label: 'Later replies that get an answer', min: -1.5, max: 2, step: 0.05, fmt: () => pct(logistic(baseParams().mu + state.dMu)),
-        hint: 'Higher means longer back-and-forth exchanges.' },
+      { key: 'dC0', kind: 'range', label: 'Direct replies that get an answer', min: -3, max: 2, step: 0.05, fmt: () => pct(answerParts(modelParams(), 1, 0, true).any),
+        hint: 'Chance of at least one reply, under a root with one reply, in a typical conversation.' },
+      { key: 'dMu', kind: 'range', label: 'Later replies that get an answer', min: -1.5, max: 2, step: 0.05, fmt: () => pct(answerParts(modelParams(), 1, 0, false).any),
+        hint: 'The same chance for a reply to another reply. Higher means longer exchanges.' },
       { key: 'sigScale', kind: 'range', label: 'Difference between conversations', min: 0.4, max: 1.6, step: 0.02, fmt: (v) => '×' + v.toFixed(2),
         hint: 'How much more persistent some conversations are than others.' },
-      { key: 'dBranch', kind: 'range', label: 'Side threads', min: -1.5, max: 1.5, step: 0.05, fmt: () => pct(logistic(baseParams().f0 + state.dBranch)),
-        hint: 'Chance that an exchange splits into several.' },
+      { key: 'dBranch', kind: 'range', label: 'Side threads', min: -1.5, max: 1.5, step: 0.05, fmt: () => pct(answerParts(modelParams(), 1, 0, false).phi),
+        hint: 'Chance that an exchange splits into several when it ends.' },
       { kind: 'facts', id: 'facts-pop' },
       { kind: 'params' },
     ] },
     { title: 'Scale and quota', controls: [
-      { key: 'replies', kind: 'log', label: 'Japanese replies a month', min: 5e7, max: 3e9, fmt: big, hint: 'Unknown. The default is an estimate from public figures.' },
-      { key: 'quota', kind: 'log', label: 'Monthly quota, in posts', min: 1e6, max: 1e9, fmt: big, hint: 'Unknown. The default is a press-reported package size.' },
+      { key: 'replies', kind: 'log', label: 'Replies a month', min: 5e7, max: 3e9, fmt: big, hint: 'Replies in conversations under Japanese roots. Unknown: the default is an estimate of Japanese-written replies, which is not quite the same thing.' },
+      { key: 'quota', kind: 'log', label: 'Monthly quota, in units', min: 1e6, max: 1e9, fmt: big, hint: 'One unit is the charge for one post. Unknown: the default is a press-reported package size.' },
       { kind: 'facts', id: 'facts-scale' },
     ] },
     { title: 'The contract', controls: [
-      { key: 'stream', kind: 'seg', label: 'A reply stream outside the quota', options: [['none', 'None'], ['s1', '1%'], ['s10', '10%'], ['full', 'Full']] },
+      { key: 'stream', kind: 'seg', label: 'A reply stream outside the quota', options: [['none', 'None'], ['s1', '1%'], ['s10', '10%'], ['full', 'Full']],
+        hint: 'Assumes the stream carries every reply in a conversation, in any language.' },
       { key: 'minReplies', kind: 'seg', label: 'Root search counts', options: [['direct', 'Direct replies'], ['all', 'All replies below']],
         hint: 'What min_replies measures. X does not document it; direct replies is the best guess.' },
-      { key: 'countPrice', kind: 'range', label: 'Price of one count request', min: 0, max: 20, step: 0.5, fmt: (v) => v + (v === 1 ? ' unit' : ' units') },
+      { key: 'countPrice', kind: 'range', label: 'Price of one count request', min: 0, max: 20, step: 0.5, fmt: (v) => v + (v === 1 ? ' unit' : ' units'),
+        hint: 'Set to 0 if counts do not draw on the quota.' },
       { key: 'streamPrice', kind: 'range', label: 'Price of a bought stream post', min: 0, max: 1, step: 0.05, fmt: (v) => v.toFixed(2) + ' unit', disabled: () => state.stream !== 'none' },
       { kind: 'more', title: 'More billing assumptions', controls: [
         { key: 'rootDays', kind: 'range', label: 'Days a root is billed by search', min: 1, max: 30, step: 1, fmt: (v) => v + (v === 1 ? ' day' : ' days') },
@@ -229,7 +231,7 @@
 
   /* ====================================================================== population */
   const REF = { japan2011: COST.fromCells(REF_TABLES.japan2011.cells), usArchives: COST.fromCells(REF_TABLES.usArchives.cells) };
-  const refPop = { japan2011: COST.buildPop(REF.japan2011.w, REF.japan2011.ws), usArchives: COST.buildPop(REF.usArchives.w, REF.usArchives.ws) };
+  const refPop = { japan2011: COST.buildPop(REF.japan2011.w, REF.japan2011.ws, { wq: REF.japan2011.wq }), usArchives: COST.buildPop(REF.usArchives.w, REF.usArchives.ws, { wq: REF.usArchives.wq }) };
   const TABLES = { japan2011: REF.japan2011 };
   if (typeof SCENARIO_TABLES !== 'undefined') for (const k in SCENARIO_TABLES) TABLES[k] = COST.fromCells(SCENARIO_TABLES[k].cells);
   const scenarioTable = (name) => { const sc = CONFIG.scenarios[name], t = TABLES[sc.table] || REF.japan2011, mix = scenarioSet(name).mix; return mix > 0 ? COST.blend(t, REF.usArchives, mix / 100) : t; };
@@ -247,8 +249,8 @@
     pending = true; setBusy(true);
     const onRound = (m) => {
       if (m.id !== simId) return;
-      const t = GRT.normalise(m.W, m.WS);
-      table = t; tableInfo = { kind: 'sim', trees: m.trees, round: m.round, rounds: m.rounds, excess: m.excess };
+      const t = GRT.normalise(m.W, m.WS, m.WQ);
+      table = t; tableInfo = { kind: 'sim', trees: m.trees, round: m.round, rounds: m.rounds, excess: m.excess, capped: m.capped };
       pending = m.round < m.rounds; if (!pending) setBusy(false);
       popCache = null; schedule();
     };
@@ -260,13 +262,13 @@
     } catch (e) { mainThreadSim(id, params, onRound); }
   }
   function mainThreadSim(id, params, onRound) {          // fallback when workers are unavailable
-    const W = new Float64Array(NB * NB), WS = new Float64Array(NB * NB); let r = 0, trees = 0;
+    const W = new Float64Array(NB * NB), WS = new Float64Array(NB * NB), WQ = new Float64Array(NB * NB); let r = 0, trees = 0;
     const step = () => {
       if (id !== simId) return;
       const res = GRT.simulate(params, { seed: CONFIG.sim.seed + 101 * r, rounds: 1, budget: CONFIG.sim.budget });
-      for (let c = 0; c < W.length; c++) { W[c] += res.W[c]; WS[c] += res.WS[c]; }
+      for (let c = 0; c < W.length; c++) { W[c] += res.W[c]; WS[c] += res.WS[c]; WQ[c] += res.WQ[c]; }
       trees += res.trees; r++;
-      onRound({ id, W, WS, trees, round: r, rounds: CONFIG.sim.rounds, excess: res.excess });
+      onRound({ id, W, WS, WQ, trees, round: r, rounds: CONFIG.sim.rounds, excess: res.excess, capped: res.capped });
       if (r < CONFIG.sim.rounds) setTimeout(step, 0);
     };
     setTimeout(step, 0);
@@ -293,33 +295,39 @@
     const key = [state.mix, state.cap, state.minReplies].join('|');
     if (!popCache || popKey !== key) {
       const t = state.mix > 0 ? COST.blend(table, REF.usArchives, state.mix / 100) : table;
-      popCache = COST.buildPop(t.w, t.ws, { cap: state.cap || Infinity, descendants: state.minReplies === 'all' }); popKey = key;
+      popCache = COST.buildPop(t.w, t.ws, { wq: t.wq, cap: state.cap || Infinity, descendants: state.minReplies === 'all' }); popKey = key;
     }
     return Object.assign({ pop: popCache }, analyse(popCache, true));
   }
+  /* A plan trimmed to find exactly the required share, put back to keeping every candidate. */
+  const whole = (pol) => { const a = pol.admit; if (!(a < 1)) return pol; const rest = (pol.cost - pol.finding) / a;
+    return Object.assign({}, pol, { admit: 1, cost: pol.finding + rest, counting: pol.counting / a, wasted: pol.wasted / a, reading: pol.reading / a, recall: pol.recall / a, found: pol.found / a }); };
   function analyse(pop, full) {
     const budget = state.quota / state.replies;
     const pr = { streamPost: state.streamPrice, traffic: state.traffic, count: state.countPrice, rootDays: state.rootDays, reread: state.reread, expansions: state.expansions, requestFee: state.requestFee };
     const stream = state.stream === 'none' ? { mode: 'buy' } : { mode: 'free', p: { s1: 0.01, s10: 0.1, full: 1 }[state.stream] };
-    let cutBin = E.indexOf(state.cut);
-    if (pop.cuts.indexOf(cutBin) < 0) cutBin = pop.cuts.filter((j) => j <= cutBin).pop() || pop.cuts[0];
+    const cutBin = E.indexOf(state.cut);
+    if (pop.cuts.indexOf(cutBin) < 0)           // no conversation this large in the population: say so, do not answer another question
+      return { ev: null, at: null, cutBin, cut: state.cut, budget, pr, stream, show: {}, chosen: null, status: 'empty', reach: null };
     const ev = COST.evaluate(pop, pr, { recall: state.recall, budget, cutSel: cutBin, allowRoot: state.allowRoot, allowSample: state.allowSample, stream });
     const at = ev.byCut[ev.selIdx];
-    // the policy shown for each strategy: the cheapest that meets the floor; failing that, what it can do
+    // the plan shown for each strategy: the cheapest tested one that finds the required share; failing that, the most it finds in the quota.
+    // Root search is shown at half the cutoff when reaching the required share would cost more than twice the conversations themselves.
     const show = {};
     for (const f of (full ? FAMS : [])) {
       const s = at.families[f]; let pol = null;
       if (f === 'root') {
-        if (state.allowRoot) {
-          pol = s.atFloor && s.atFloor.cost <= 2 * at.tierPosts ? s.atFloor : COST.rootPolicy(pop, pr, cutBin, Math.max(1, Math.floor(E[cutBin] / 2)), true);
-        }
+        if (state.allowRoot) pol = s.atFloor && s.atFloor.cost <= 2 * at.tierPosts ? s.atFloor : COST.rootPolicy(pop, pr, cutBin, Math.max(1, Math.floor(E[cutBin] / 2)), true);
       } else pol = s.atFloor || s.inBudget || null;
+      if (pol && pol === s.atFloor && whole(pol).cost <= budget) pol = whole(pol);      // no need to drop candidates when the whole plan fits
       if (pol) show[f] = Object.assign({ cover: COST.coverage(pop, pol) }, pol);
     }
+    // status: ok = the required share fits the quota; short = it can be found, but not within the quota;
+    //         ceiling = no allowed plan finds the required share at any cost; none = nothing is allowed or affordable
     let chosen = null, status = 'ok';
-    if (at.atFloor && at.atFloor.cost <= budget) chosen = at.atFloor;
-    else if (at.inBudget) { chosen = at.inBudget; status = 'short'; }
-    else { chosen = at.atFloor; status = 'over'; }
+    if (at.atFloor && at.atFloor.cost <= budget) chosen = whole(at.atFloor).cost <= budget ? whole(at.atFloor) : at.atFloor;
+    else if (at.inBudget) { chosen = at.inBudget; status = at.atFloor ? 'short' : 'ceiling'; }
+    else { chosen = at.atFloor; status = chosen ? 'over' : 'none'; }
     if (chosen) chosen = Object.assign({ cover: COST.coverage(pop, chosen) }, chosen);
     const reach = ev.byCut.find((c) => c.atFloor && c.atFloor.cost <= budget);
     return { ev, at, cutBin, cut: E[cutBin], budget, pr, stream, show, chosen, status, reach };
@@ -336,9 +344,13 @@
   function recipe(pol, cut) {
     const parts = [], unit = state.minReplies === 'all' ? 'replies below them' : 'direct replies';
     if (pol.T) parts.push('Search for original posts with at least ' + int(pol.T) + ' ' + unit + '.');
-    if (pol.p) parts.push((state.stream !== 'none' ? 'Take the ' + (pol.p >= 1 ? 'full' : pShow(pol.p)) + ' stream' : 'Buy a ' + pShow(pol.p) + ' sample of replies')
-      + ' and treat a conversation as a candidate at its ' + ord(pol.h) + ' sampled reply.');
-    parts.push(pol.count ? 'Count each candidate once and fetch those that reach ' + int(cut) + ' posts.' : 'Fetch every candidate without counting.');
+    if (pol.full) { parts.push('Keep the full stream. It already holds every reply, so sizes are known; fetch only the root of each conversation that reaches ' + int(cut) + ' posts.'); }
+    else {
+      if (pol.p) parts.push((state.stream !== 'none' ? 'Take the ' + pShow(pol.p) + ' stream' : 'Buy a ' + pShow(pol.p) + ' sample of replies')
+        + ' and treat a conversation as a candidate at its ' + ord(pol.h) + ' sampled reply.');
+      if (pol.admit < 0.995) parts.push('Keep a random ' + pct(pol.admit) + ' of the candidates.');
+      parts.push(pol.count ? 'Count each ' + (pol.admit < 0.995 ? 'kept ' : '') + 'candidate once and fetch those that reach ' + int(cut) + ' posts.' : 'Fetch every ' + (pol.admit < 0.995 ? 'kept ' : '') + 'candidate without counting.');
+    }
     if (state.cap) parts.push('Read only the first ' + int(state.cap) + ' posts of each.');
     return parts.join(' ');
   }
@@ -389,16 +401,20 @@
     const rootCand = rootPart ? rootPart.cand : 0, sampleCand = Math.max(0, c.cand - rootCand);
     const streamCost = c.p && !free ? d.pr.streamPost * d.pr.traffic * c.p : 0, rootCost = Math.max(0, c.finding - streamCost);
     const unit = state.minReplies === 'all' ? 'replies below' : 'direct replies';
+    const adm = c.admit == null ? 1 : c.admit, part = adm < 0.995, kept = adm * c.cand, small = Math.max(0, kept - c.found);
     const boxes = {
-      root: c.T ? { on: true, color: 'var(--root)', title: 'Root search', lines: ['roots with ' + int(c.T) + '+ ' + unit, big(rootCand * R) + ' candidates a month', 'costs ' + big(rootCost * R) + ' posts'] }
+      root: c.T ? { on: true, color: 'var(--root)', title: 'Root search', lines: ['roots with ' + int(c.T) + '+ ' + unit, big(rootCand * R) + ' candidates a month', 'costs ' + big(rootCost * R) + ' units'] }
                 : { on: false, title: 'Root search', lines: ['not used in this plan'] },
-      sample: c.p ? { on: true, color: 'var(--sample)', title: free ? (c.p >= 1 ? 'Full reply stream' : 'Free ' + pShow(c.p) + ' reply stream') : pShow(c.p) + ' reply sample',
-                      lines: ['candidate at ' + ord(c.h) + ' sampled reply', big(sampleCand * R) + ' candidates a month', free ? 'outside the quota' : 'costs ' + big(streamCost * R) + ' posts'] }
+      sample: c.full ? { on: true, color: 'var(--sample)', title: 'Full reply stream', lines: ['already holds every reply', big(c.cand * R) + ' reach ' + int(d.cut) + ' posts', 'outside the quota'] }
+            : c.p ? { on: true, color: 'var(--sample)', title: free ? 'Free ' + pShow(c.p) + ' reply stream' : pShow(c.p) + ' reply sample',
+                      lines: ['candidate at ' + ord(c.h) + ' sampled reply', big(sampleCand * R) + ' candidates a month', free ? 'outside the quota' : 'costs ' + big(streamCost * R) + ' units'] }
                   : { on: false, title: 'Reply sample', lines: ['not used in this plan'] },
-      count: c.count ? { on: true, title: 'Count each candidate once', lines: [big(c.cand * R) + ' counts at ' + state.countPrice + (state.countPrice === 1 ? ' unit' : ' units'), big(Math.max(0, c.cand - c.found) * R) + ' too small, dropped', 'costs ' + big(c.counting * R) + ' posts'] }
-                     : { on: true, title: 'No count', lines: ['every candidate is fetched', big(Math.max(0, c.cand - c.found) * R) + ' turn out too small', 'costs nothing'] },
-      fetch: { on: true, title: 'Fetch the conversation', lines: [big(c.found * R) + ' reach ' + int(d.cut) + ' posts', state.cap ? 'first ' + int(state.cap) + ' posts of each' : c.wasted > 0 ? big(c.wasted * R) + ' posts discarded' : 'each post read once', 'costs ' + big((c.reading + c.wasted) * R) + ' posts'] },
-      done: { on: true, color: col, fill: true, title: 'Collected', lines: [big(c.found * R) + ' conversations a month', pct(c.recall) + ' of the ' + big(d.at.tierW * R) + ' of ' + int(d.cut) + '+ posts', big(c.cost * R) + ' posts, ' + pct(c.cost / d.budget) + ' of quota'] },
+      count: c.full ? { on: true, title: 'No count needed', lines: ['sizes are known from the stream', 'nothing is dropped', 'costs nothing'] }
+           : c.count ? { on: true, title: part ? 'Keep ' + pct(adm) + ', count each once' : 'Count each candidate once', lines: [big(kept * R) + ' counts at ' + state.countPrice + (state.countPrice === 1 ? ' unit' : ' units'), big(small * R) + ' too small, dropped', 'costs ' + big(c.counting * R) + ' units'] }
+                     : { on: true, title: part ? 'Keep ' + pct(adm) + ', no count' : 'No count', lines: [big(kept * R) + ' candidates fetched', big(small * R) + ' turn out too small', 'costs nothing'] },
+      fetch: c.full ? { on: true, title: 'Fetch the roots', lines: [big(c.found * R) + ' roots, one post each', 'replies are already in hand', 'costs ' + big(c.reading * R) + ' units'] }
+           : { on: true, title: 'Fetch the conversation', lines: [big(c.found * R) + ' reach ' + int(d.cut) + ' posts', state.cap ? 'first ' + int(state.cap) + ' posts of each' : c.wasted > 0 ? big(c.wasted * R) + ' units on ones too small' : 'each post read once', 'costs ' + big((c.reading + c.wasted) * R) + ' units'] },
+      done: { on: true, color: col, fill: true, title: 'Collected', lines: [big(c.found * R) + ' conversations a month', pct(c.recall) + ' of the ' + big(d.at.tierW * R) + ' of ' + int(d.cut) + '+ posts', big(c.cost * R) + ' units, ' + pct(c.cost / d.budget) + ' of quota'] },
     };
     const wide = host.clientWidth >= 760, BH = 90, uid = 'lg' + (drawLogic.n = (drawLogic.n || 0) + 1);
     const f = frame('ch-logic', wide ? 2 * BH + 16 + 20 : 5 * BH + 4 * 26 + 12, 'The chosen plan as a flow: finding, counting, fetching and what is collected');
@@ -427,12 +443,12 @@
       order.forEach((k, i) => { const y = 4 + i * (BH + 26); box(boxes[k], x, y, w); if (i === 0) el('text', { x: x + w / 2, y: y + BH + 18, 'text-anchor': 'middle', class: 'strong' }, f.svg, 'and'); else if (i < order.length - 1) arrow('M' + (x + w / 2) + ' ' + (y + BH + 3) + 'V' + (y + BH + 23)); });
     }
     const q = c.cover ? c.cover.foundQuiet : null;
-    document.getElementById('sub-logic').textContent = 'The plan in the headline, step by step, with monthly numbers under the current settings. A way of finding that the plan does not use is shown dashed.'
+    document.getElementById('sub-logic').textContent = 'The plan in the headline, step by step, with monthly numbers. A way of finding that the plan does not use is shown dashed. One unit is the charge for one post.'
       + (q != null ? ' It misses ' + big(Math.max(0, d.at.tierW - c.found) * R) + ' conversations of ' + int(d.cut) + '+ posts a month, and finds ' + pct(q) + ' of the quiet-root ones.' : '');
   }
 
   function drawFrontier(d) {
-    const R = state.replies, f = frame('ch-frontier', 330, 'Share of target conversations found against posts read each month, by strategy');
+    const R = state.replies, f = frame('ch-frontier', 330, 'Share of target conversations found against units charged each month, by strategy');
     const m = { l: 46, r: 18, t: 22, b: 42 }, x0 = m.l, x1 = f.w - m.r, y0 = f.h - m.b, y1 = m.t;
     const fr = d.ev.frontier; let lo = Infinity, hi = 0;
     for (const k of FAMS) if (fr[k].length) { lo = Math.min(lo, fr[k][0][0]); hi = Math.max(hi, fr[k][fr[k].length - 1][0]); }
@@ -444,7 +460,7 @@
     for (const v of [0, 0.25, 0.5, 0.75, 1]) { el('line', { x1: x0, x2: x1, y1: Y(v), y2: Y(v), stroke: 'var(--grid)' }, f.svg); el('text', { x: x0 - 8, y: Y(v) + 4, 'text-anchor': 'end', class: 'tick' }, f.svg, Math.round(100 * v) + '%'); }
     for (const v of logTicks(dx0, dx1)) { el('line', { x1: X(v), x2: X(v), y1: y0, y2: y0 + 5, stroke: 'var(--line-2)' }, f.svg); el('text', { x: X(v), y: y0 + 18, 'text-anchor': 'middle', class: 'tick' }, f.svg, big(v)); }
     el('line', { x1: x0, x2: x1, y1: y0, y2: y0, stroke: 'var(--line-2)' }, f.svg);
-    el('text', { x: (x0 + x1) / 2, y: f.h - 6, 'text-anchor': 'middle' }, f.svg, 'Posts read each month (log scale)');
+    el('text', { x: (x0 + x1) / 2, y: f.h - 6, 'text-anchor': 'middle' }, f.svg, 'Units charged each month (log scale)');
     // floor and quota
     el('line', { x1: x0, x2: x1, y1: Y(state.recall), y2: Y(state.recall), stroke: 'var(--ink-3)', 'stroke-dasharray': '3 4' }, f.svg);
     el('text', { x: x0 + 6, y: Y(state.recall) - 6 }, f.svg, 'must find ' + Math.round(100 * state.recall) + '%');
@@ -455,10 +471,9 @@
     // lines
     for (const k of FAMS) {
       if (!fr[k].length) continue;
-      const pts = []; let prev = null;
-      for (const p of fr[k]) { const cx = Math.max(dx0, Math.min(dx1, p[0] * R)); if (prev != null) pts.push([X(cx), Y(prev)]); pts.push([X(cx), Y(p[1])]); prev = p[1]; if (p[0] * R > dx1) break; }
-      if (prev != null && fr[k][fr[k].length - 1][0] * R < dx1) pts.push([x1, Y(prev)]);
-      el('path', { d: path(pts), fill: 'none', stroke: FAM[k].color, 'stroke-width': 2, 'stroke-linejoin': 'round' }, f.svg);
+      const pts = fr[k].filter((p) => p[0] * R >= dx0 && p[0] * R <= dx1).map((p) => [X(p[0] * R), Y(p[1])]);
+      if (pts.length && fr[k][fr[k].length - 1][0] * R < dx1) pts.push([x1, pts[pts.length - 1][1]]);
+      if (pts.length > 1) el('path', { d: path(pts), fill: 'none', stroke: FAM[k].color, 'stroke-width': 2, 'stroke-linejoin': 'round' }, f.svg);
     }
     if (d.chosen) {
       const cx = X(Math.max(dx0, Math.min(dx1, d.chosen.cost * R))), cy = Y(d.chosen.recall);
@@ -471,7 +486,7 @@
     ov.addEventListener('pointermove', (ev) => {
       const b = f.svg.getBoundingClientRect(), px = (ev.clientX - b.left) * f.w / b.width, cost = X.inv(px) / R;
       cross.setAttribute('x1', px); cross.setAttribute('x2', px); cross.setAttribute('visibility', 'visible');
-      let html = '<b>' + big(cost * R) + ' posts a month</b> · ' + pct(cost * R / quota) + ' of quota';
+      let html = '<b>' + big(cost * R) + ' units a month</b> · ' + pct(cost * R / quota) + ' of quota';
       for (const k of FAMS) { let best = null; for (const p of fr[k]) { if (p[0] <= cost) best = p; else break; } html += row(FAM[k].color, FAM[k].name, best ? 'finds ' + pct(best[1]) : fr[k].length ? 'nothing yet' : 'not allowed'); }
       f.showTip(px * b.width / f.w, ev.clientY - b.top, html);
     });
@@ -481,7 +496,7 @@
 
   function drawBars(d) {
     const R = state.replies, fams = FAMS.filter((k) => d.show[k]), rowH = 58;
-    const f = frame('ch-bars', fams.length * rowH + 40, 'Posts read each month by strategy, split into finding, counting and reading');
+    const f = frame('ch-bars', fams.length * rowH + 40, 'Units charged each month by strategy, split into finding, counting and reading');
     const m = { l: 8, r: 64, t: 6 }, x0 = m.l, x1 = f.w - m.r;
     const maxC = Math.max.apply(null, fams.map((k) => d.show[k].cost * R));
     const X = lin(0, maxC * 1.02, x0, x1), y0 = m.t + fams.length * rowH;
@@ -512,14 +527,14 @@
     const step = niceStep(maxC * 1.02 / 4);
     for (let v = 0; v <= maxC * 1.02; v += step) { el('line', { x1: X(v), x2: X(v), y1: y0, y2: y0 + 5, stroke: 'var(--line-2)' }, f.svg); el('text', { x: X(v), y: y0 + 18, 'text-anchor': v === 0 ? 'start' : 'middle', class: 'tick' }, f.svg, v === 0 ? '0' : big(v)); }
     if (qIn) { el('line', { x1: X(quota), x2: X(quota), y1: m.t, y2: y0, stroke: 'var(--ink)', 'stroke-width': 1.25 }, f.svg); el('text', { x: X(quota) - 5, y: y0 - 4, 'text-anchor': 'end', class: 'strong' }, f.svg, 'Quota'); }
-    el('text', { x: x1, y: f.h - 4, 'text-anchor': 'end' }, f.svg, 'posts a month' + (qIn ? '' : ' · quota ' + big(quota) + ' is off the scale'));
+    el('text', { x: x1, y: f.h - 4, 'text-anchor': 'end' }, f.svg, 'units a month' + (qIn ? '' : ' · quota ' + big(quota) + ' is off the scale'));
     legend('leg-bars', [['box', 'var(--ink-2)', 'Reading the conversations'], ['box', 'var(--ink-2)', 'Finding them', 'opacity:.55'], ['box', 'var(--ink-2)', 'Counting candidates', 'opacity:.28']]);
   }
   function niceStep(raw) { const p = Math.pow(10, Math.floor(Math.log10(raw))), n = raw / p; return (n < 1.5 ? 1 : n < 3.5 ? 2 : n < 7.5 ? 5 : 10) * p; }
 
   function drawReach(d) {
     const R = state.replies, pts = d.ev.byCut.filter((c) => c.atFloor).map((c) => [c.size, c.atFloor.cost * R, c.atFloor]);
-    const f = frame('ch-reach', 300, 'Posts a month needed to collect conversations above each size');
+    const f = frame('ch-reach', 300, 'Units a month needed to collect conversations above each size');
     if (pts.length < 2) return;
     const m = { l: 46, r: 16, t: 20, b: 42 }, x0 = m.l, x1 = f.w - m.r, y0 = f.h - m.b, y1 = m.t, quota = state.quota;
     const ys = pts.map((p) => p[1]), X = logS(pts[0][0], pts[pts.length - 1][0], x0, x1);
@@ -540,7 +555,7 @@
       const b = f.svg.getBoundingClientRect(), px = (ev.clientX - b.left) * f.w / b.width, s = X.inv(px);
       let best = pts[0]; for (const p of pts) if (Math.abs(Math.log(p[0] / s)) < Math.abs(Math.log(best[0] / s))) best = p;
       cross.setAttribute('x1', X(best[0])); cross.setAttribute('x2', X(best[0])); cross.setAttribute('visibility', 'visible');
-      f.showTip(X(best[0]) * b.width / f.w, ev.clientY - b.top, '<b>' + int(best[0]) + ' posts or more</b>' + row('', 'Cost', big(best[1]) + ' a month') + row('', 'Share of quota', pct(best[1] / quota)) + row('', 'Cheapest way', FAM[best[2].family].name));
+      f.showTip(X(best[0]) * b.width / f.w, ev.clientY - b.top, '<b>' + int(best[0]) + ' posts or more</b>' + row('', 'Charge', big(best[1]) + ' units a month') + row('', 'Share of quota', pct(best[1] / quota)) + row('', 'Cheapest way', FAM[best[2].family].name));
     });
     ov.addEventListener('pointerleave', () => { cross.setAttribute('visibility', 'hidden'); f.hideTip(); });
   }
@@ -680,8 +695,37 @@
     }
     return { nodes, cut };
   }
+  /* Every parameter: symbol, name in the code, what it sets, the control that moves it, why it matters for collection. */
+  const PARAM_ROWS = [
+    ['sec', 'How many direct replies a root gets'],
+    ['<i>w</i>', ['w'], 'Share of roots that are ordinary. The rest, 1 &minus; <i>w</i>, are the popular group.', 'Roots in the popular group', 'How concentrated replies are, and so the size a quota reaches'],
+    ['<i>a</i><sub>1</sub>, <i>t</i><sub>1</sub>', ['a1', 't1'], 'Ordinary roots: how fast the count of direct replies falls off, and how that fall steepens.', 'Reach of the most popular posts', 'The share of roots with a single reply'],
+    ['<i>a</i><sub>2</sub>, <i>t</i><sub>2</sub>', ['a2', 't2'], 'Popular roots: lower <i>a</i><sub>2</sub> means more replies; lower <i>t</i><sub>2</sub> means a longer tail of very large roots.', 'Reach of the most popular posts', 'How much sits in conversations of 1,000+ posts'],
+    ['sec', 'Whether a reply to the root is answered'],
+    ['<i>c</i><sub>0</sub>', ['c0'], 'The chance at a root with one reply, as log-odds.', 'Direct replies that get an answer', 'How many conversations there are per reply'],
+    ['<i>c</i><sub>1</sub>', ['c1'], 'How fast that chance falls as the root gets more replies.', null, 'Whether popular roots carry exchanges as well as direct replies'],
+    ['<i>s</i><sub>1</sub>', ['s1'], 'How much that chance differs from one conversation to the next.', null, 'How uneven conversations under similar roots are'],
+    ['sec', 'Whether a later reply is answered'],
+    ['<i>&mu;</i>', ['mu'], 'The chance at a root with one reply, as log-odds.', 'Later replies that get an answer', 'How long exchanges run, and so how many large conversations are quiet-root'],
+    ['<i>&gamma;</i>', ['gam'], 'How fast that chance falls as the root gets more replies.', null, 'How much back-and-forth there is under popular roots'],
+    ['<i>&sigma;</i>', ['sig'], 'How much that chance differs between conversations.', 'Difference between conversations', 'The few very persistent conversations, which root search misses'],
+    ['<i>&tau;</i>', ['tau'], 'How much it differs between exchanges inside one conversation.', null, 'Long side exchanges under an otherwise ordinary conversation'],
+    ['sec', 'Whether an exchange splits when it ends'],
+    ['<i>g</i><sub>0</sub>, <i>f</i><sub>0</sub>', ['g0', 'f0'], 'Budget for new exchanges, as log-odds: after a reply to the root, and after a later reply.', 'Side threads', 'Conversations that grow large without a popular root'],
+    ['<i>f</i><sub>1</sub>', ['f1'], 'How both budgets change as the root gets more replies.', null, 'Side threads under popular roots'],
+    ['<i>&alpha;</i><sub>0</sub>', ['alpha0'], 'How many replies a split draws. Higher means fewer.', null, 'Sudden bursts of replies deep in a conversation'],
+    ['<i>b</i><sub>1</sub>, <i>b</i><sub>2</sub>', ['b1', 'b2'], 'How much wider splits get under popular roots: after a reply to the root, and after a later reply.', null, 'The same, under popular roots'],
+  ];
+  function drawParamTable(P) {
+    const num = (v) => (Math.abs(v) >= 100 ? v.toFixed(0) : Math.abs(v) >= 10 ? v.toFixed(1) : v.toFixed(Math.abs(v) < 0.1 ? 3 : 2)).replace('-', '&minus;');
+    document.getElementById('model-params').innerHTML = '<table class="ptable"><thead><tr><th>Parameter</th><th>Now</th><th>What it sets</th><th>Control that moves it</th><th>Why it matters for collection</th></tr></thead><tbody>'
+      + PARAM_ROWS.map((r) => r[0] === 'sec' ? '<tr class="sec"><td colspan="5">' + r[1] + '</td></tr>'
+        : '<tr><td class="sym">' + r[0] + '<small>' + r[1].join(', ') + '</small></td><td class="val">' + r[1].map((k) => num(P[k])).join(', ') + '</td><td>' + r[2] + '</td><td class="ctl' + (r[3] ? '' : ' none') + '">' + (r[3] || 'the parameter list only') + '</td><td>' + r[4] + '</td></tr>').join('')
+      + '</tbody></table>';
+  }
   function drawModel() {
     const P = modelParams(), P0 = CONFIG.models.japan2011.params;
+    drawParamTable(P);
     // ---- direct replies to a root: share of roots with at least k
     {
       const f = frame('ch-rootlaw', 250, 'Share of roots with at least a given number of direct replies');
@@ -758,46 +802,59 @@
   function facts(id, rows) { document.getElementById(id).innerHTML = rows.map(([k, v]) => '<dt>' + k + '</dt><dd>' + v + '</dd>').join(''); }
   function render() {
     const d = last = compute(), R = state.replies, pop = d.pop, at = d.at, c = d.chosen;
-    const j100 = E.indexOf(100), j1000 = E.indexOf(1000);
+    const j100 = E.indexOf(100), j1000 = E.indexOf(1000), need = Math.round(100 * state.recall) + '%', sizeTxt = int(d.cut) + '+ posts';
     facts('facts-pop', [
       ['Replies in conversations of 100+', pct(pop.tierS[j100] - pop.tierW[j100])],
       ['Replies in conversations of 1,000+', pct(pop.tierS[j1000] - pop.tierW[j1000])],
       ['Conversations of 100+ per million replies', big(1e6 * pop.tierW[j100])],
       ['Of those, quiet-root', pop.tierW[j100] ? pct(pop.tierQuiet[j100] / pop.tierW[j100]) : '–'],
     ]);
-    facts('facts-scale', [['Quota as a share of all replies', pct(d.budget)], ['Conversations of ' + int(d.cut) + '+ a month', big(at.tierW * R)]]);
+    facts('facts-scale', [['Quota as a share of the charge for every reply', pct(d.budget)], ['Conversations of ' + sizeTxt + ' a month', at ? big(at.tierW * R) : 'none']]);
     // verdict
     const pill = document.getElementById('pill'), head = document.getElementById('headline'), rec = document.getElementById('recipe');
-    if (!c) { pill.className = 'pill short'; pill.textContent = 'No way allowed'; head.textContent = 'Allow at least one way of finding conversations.'; rec.textContent = ''; }
+    const setPill = (cls, t) => { pill.className = 'pill ' + cls; pill.textContent = t; };
+    if (d.status === 'empty') { setPill('short', 'Nothing this large'); head.textContent = 'This population has no conversations of ' + sizeTxt + '.'; rec.textContent = 'Lower the size, or choose a scenario with larger conversations.'; }
+    else if (!c) { setPill('short', 'No plan'); head.textContent = state.allowRoot || state.allowSample ? 'No allowed plan fits this quota.' : 'Allow at least one way of finding conversations.'; rec.textContent = ''; }
     else {
       const name = famName(c);
-      if (d.status === 'ok') { pill.className = 'pill ok'; pill.textContent = 'Fits the quota'; head.textContent = name + ' finds ' + pct(c.recall) + ' of conversations of ' + int(d.cut) + '+ posts for ' + big(c.cost * R) + ' posts a month.'; }
-      else if (d.status === 'short') { pill.className = 'pill short'; pill.textContent = 'Quota too small for the target'; head.textContent = 'The quota cannot find ' + Math.round(100 * state.recall) + '% of conversations of ' + int(d.cut) + '+ posts. The most it finds is ' + pct(c.recall) + '.'; }
-      else { pill.className = 'pill short'; pill.textContent = 'Over the quota'; head.textContent = 'Even the cheapest plan costs ' + big(c.cost * R) + ' posts a month, ' + (c.cost / d.budget).toFixed(1) + ' times the quota.'; }
-      rec.textContent = recipe(c, d.cut) + (d.status === 'short' && at.atFloor ? ' Reaching ' + Math.round(100 * state.recall) + '% would cost ' + big(at.atFloor.cost * R) + ' posts a month.' : '')
-        + (d.status !== 'ok' && d.reach ? ' At this quota, the smallest size that can be collected with ' + Math.round(100 * state.recall) + '% found is ' + int(d.reach.size) + ' posts.' : '');
+      if (d.status === 'ok') { setPill('ok', 'Fits the quota'); head.textContent = name + ' finds ' + pct(c.recall) + ' of conversations of ' + sizeTxt + ' for ' + big(c.cost * R) + ' units a month.'; }
+      else if (d.status === 'short') { setPill('short', 'Quota too small for the target'); head.textContent = 'This quota cannot find ' + need + ' of conversations of ' + sizeTxt + '. The most it finds, among the plans tried, is ' + pct(c.recall) + '.'; }
+      else if (d.status === 'ceiling') { setPill('short', 'Target out of reach'); head.textContent = 'No allowed plan finds ' + need + ' of conversations of ' + sizeTxt + ', at any quota. The most this quota finds is ' + pct(c.recall) + '.'; }
+      else { setPill('short', 'Over the quota'); head.textContent = 'The cheapest plan tried costs ' + big(c.cost * R) + ' units a month, ' + (c.cost / d.budget).toFixed(1) + ' times the quota.'; }
+      rec.textContent = recipe(c, d.cut) + (d.status === 'short' ? ' Finding ' + need + ' would cost ' + big(at.atFloor.cost * R) + ' units a month.' : '')
+        + (d.status === 'ceiling' ? ' The limit is what the allowed ways of finding can see, not the quota.' : '')
+        + (d.status !== 'ok' && d.reach ? ' With ' + need + ' found, this quota reaches conversations of about ' + int(d.reach.size) + '+ posts.' : '');
     }
     const k = [];
     if (c) {
+      const returned = (c.finding + c.wasted + c.reading) * R;
       k.push(['Conversations collected a month', big(c.found * R), pct(c.recall) + ' of the ' + big(at.tierW * R) + ' that reach ' + int(d.cut) + ' posts']);
-      k.push(['Posts read a month', big(c.cost * R), pct(c.cost / d.budget) + ' of the quota']);
-      k.push(['Spent on finding, not reading', pct(1 - c.reading / c.cost), big((c.cost - c.reading) * R) + ' posts on search, stream and counts']);
+      k.push(['Units charged a month', big(c.cost * R), pct(c.cost / d.budget) + ' of the quota; about ' + big(returned) + ' posts returned']);
+      k.push(['Spent on finding, not reading', pct(1 - c.reading / c.cost), big((c.cost - c.reading) * R) + ' units on search, stream and counts']);
       k.push(['Quiet-root conversations found', pct(c.cover.foundQuiet), 'against ' + pct(c.cover.foundDriven) + ' of root-driven ones']);
     }
     document.getElementById('kpis').innerHTML = k.map(([a, b, s]) => '<div class="kpi"><div class="k">' + a + '</div><div class="v">' + b + '</div><div class="s">' + s + '</div></div>').join('');
-    // captions
-    document.getElementById('sub-frontier').textContent = 'Each line is the most a strategy can find for a given number of posts, for conversations of ' + int(d.cut) + '+ posts. Left of the quota line is affordable.';
-    document.getElementById('sub-bars').textContent = 'Each strategy at its cheapest setting that finds ' + Math.round(100 * state.recall) + '%, or at its best where it cannot. The solid part is the conversations themselves.';
-    document.getElementById('sub-reach').textContent = d.reach ? 'With ' + pct(state.recall) + ' found, this quota reaches conversations of ' + int(d.reach.size) + '+ posts. Below the quota line is affordable.'
-      : 'With ' + pct(state.recall) + ' found, this quota reaches no size on the scale. Below the quota line is affordable.';
-    document.getElementById('sub-cover').textContent = 'The chance that a conversation of a given size is collected, split by its shape. A gap between the two lines is a bias in the data set.';
-    const qs = pop.tierW[d.cutBin] ? pop.tierQuiet[d.cutBin] / pop.tierW[d.cutBin] : 0;
-    document.getElementById('note-cover').textContent = 'Under these assumptions ' + pct(qs) + ' of conversations of ' + int(d.cut) + '+ posts are quiet-root. Root search sees a conversation only when its root has enough replies; a reply sample sees any conversation in proportion to its size.';
-    document.getElementById('sub-pop').textContent = 'How concentrated replies are. The two grey lines are the reference data sets; the black line is what the settings on the left imply.';
     const st = document.getElementById('status');
     st.innerHTML = tableInfo.kind === 'ref' ? '<b>' + (tableInfo.name === 'japan2011' ? 'Japan 2011 reference' : 'Precomputed scenario') + '</b> · ' + (tableInfo.name === 'japan2011' ? '200M' : big(SCENARIO_TABLES[tableInfo.name].trees)) + ' simulated conversations'
-      : '<b>' + (pending ? 'Simulating' : 'Simulated') + '</b> · ' + big(tableInfo.trees) + ' conversations' + (pending ? ' · pass ' + tableInfo.round + ' of ' + tableInfo.rounds : '') + (tableInfo.excess > 1e-7 ? ' · some conversations exceed 3M posts' : '');
+      : '<b>' + (pending ? 'Simulating' : 'Simulated') + '</b> · ' + big(tableInfo.trees) + ' conversations' + (pending ? ' · pass ' + tableInfo.round + ' of ' + tableInfo.rounds : '')
+        + (tableInfo.excess > 1e-9 || tableInfo.capped > 1e-9 ? ' · the largest conversations exceed the simulator’s limit and are understated' : '');
     document.getElementById('foot-build').textContent = CONFIG.version + '. Quota and monthly reply volume are placeholders until the contract and the 2024 data say otherwise.';
+    document.getElementById('sub-pop').textContent = 'How concentrated replies are. The two grey lines are the reference data sets; the black line is what the settings on the left imply.';
+    const clear = (ids) => ids.forEach((id) => { const h = document.getElementById(id); h.querySelectorAll('svg').forEach((x) => x.remove()); });
+    if (!at || !c) {
+      clear(['ch-logic', 'ch-frontier', 'ch-bars', 'ch-reach', 'ch-cover', 'ch-shape']);
+      ['sub-logic', 'sub-frontier', 'sub-bars', 'sub-reach', 'sub-cover', 'note-cover'].forEach((id) => { document.getElementById(id).textContent = id === 'sub-logic' ? 'Nothing to show for these settings.' : ''; });
+      ['leg-frontier', 'leg-bars', 'leg-cover'].forEach((id) => { document.getElementById(id).innerHTML = ''; });
+      drawPop(d); drawModel(); scheduleRange(); return;
+    }
+    // captions
+    document.getElementById('sub-frontier').textContent = 'Each line is the most a strategy finds at a given monthly charge, among the plans tried, for conversations of ' + sizeTxt + '. Left of the quota line is affordable.';
+    document.getElementById('sub-bars').textContent = 'Each strategy at the cheapest setting tried that finds ' + need + ', or the most it finds within the quota. Root search is shown at half the size when finding ' + need + ' would cost more than twice the conversations themselves. The solid part is the conversations themselves.';
+    document.getElementById('sub-reach').textContent = d.reach ? 'With ' + need + ' found, this quota reaches conversations of about ' + int(d.reach.size) + '+ posts, the smallest size tried that fits. Below the quota line is affordable.'
+      : 'With ' + need + ' found, this quota reaches no size tried. Below the quota line is affordable.';
+    document.getElementById('sub-cover').textContent = 'The chance that a conversation of a given size is collected, split by its shape. A gap between the two lines is a bias in the data set.';
+    const qs = pop.tierW[d.cutBin] ? pop.tierQuiet[d.cutBin] / pop.tierW[d.cutBin] : 0;
+    document.getElementById('note-cover').textContent = 'Under these assumptions ' + pct(qs) + ' of conversations of ' + sizeTxt + ' are quiet-root. Root search sees a conversation only when its root has enough replies. A reply sample is more likely to catch a conversation the larger it is, whatever its shape.';
     drawLogic(d); drawFrontier(d); drawBars(d); drawReach(d); drawCover(d); drawShape(d); drawPop(d); drawModel();
     scheduleRange();
   }
@@ -807,20 +864,22 @@
   function scheduleRange() { clearTimeout(rangeTimer); rangeTimer = setTimeout(renderRange, 220); }
   function renderRange() {
     const token = ++rangeToken, names = Object.keys(CONFIG.scenarios), cols = {}, host = document.getElementById('range');
-    const act = activeScenario(), R = state.replies;
+    const act = activeScenario(), R = state.replies, need = Math.round(100 * state.recall) + '%';
     const draw = () => {
       const cell = (name, f) => '<td class="' + (name === act ? 'on' : '') + '">' + (cols[name] ? f(cols[name]) : '<span class="wait">…</span>') + '</td>';
       const rowHtml = (label, f) => '<tr><th scope="row">' + label + '</th>' + names.map((n) => cell(n, f)).join('') + '</tr>';
+      const none = (a) => a.status === 'empty' ? '<span class="dim">none this large</span>' : '–';
       const bar = (a) => { const c = a.chosen, sh = c.cost / a.budget, over = a.status !== 'ok'; return '<div class="qbar"><i style="width:' + Math.min(100, 100 * sh).toFixed(1) + '%;background:' + (over ? 'var(--over)' : FAM[c.family].color) + '"></i></div><span class="num">' + big(c.cost * R) + '</span> <span class="dim">' + pct(sh) + ' of quota</span>'; };
+      const why = { short: 'the most within the quota', ceiling: need + ' is out of reach', over: 'over the quota' };
       host.innerHTML = '<table class="range"><thead><tr><th></th>' + names.map((n) => '<th scope="col" class="' + (n === act ? 'on' : '') + '"><button type="button" data-sc="' + n + '">' + CONFIG.scenarios[n].label + '</button></th>').join('') + '</tr></thead><tbody>'
         + rowHtml('Replies in conversations of 100+', (a) => '<span class="num">' + pct(a.share100) + '</span>')
-        + rowHtml('Large conversations that are quiet-root', (a) => '<span class="num">' + pct(a.quietShare) + '</span>')
-        + rowHtml('Cheapest plan', (a) => a.chosen ? '<span class="chip" style="background:' + FAM[a.chosen.family].color + '"></span>' + famName(a.chosen) + (a.status !== 'ok' ? '<div class="dim">target not affordable</div>' : '') : '–')
-        + rowHtml('Posts read a month', (a) => a.chosen ? bar(a) : '–')
-        + rowHtml('Share found', (a) => a.chosen ? '<span class="num">' + pct(a.chosen.recall) + '</span> <span class="dim">quiet-root ' + pct(a.quiet) + '</span>' : '–')
-        + rowHtml('Spent on finding, not reading', (a) => a.chosen ? '<span class="num">' + pct(1 - a.chosen.reading / a.chosen.cost) + '</span>' : '–')
-        + rowHtml('Root search alone finds', (a) => a.rootOnly ? '<span class="num">' + pct(a.rootOnly.recall) + '</span> <span class="dim">for ' + big(a.rootOnly.cost * R) + '</span>' : '–')
-        + rowHtml('Smallest size the quota reaches', (a) => a.reach ? '<span class="num">' + int(a.reach.size) + '+</span>' : '<span class="dim">none on the scale</span>')
+        + rowHtml('Large conversations that are quiet-root', (a) => a.quietShare == null ? none(a) : '<span class="num">' + pct(a.quietShare) + '</span>')
+        + rowHtml('Plan', (a) => a.chosen ? '<span class="chip" style="background:' + FAM[a.chosen.family].color + '"></span>' + famName(a.chosen) + (a.status !== 'ok' ? '<div class="dim">' + why[a.status] + '</div>' : '') : none(a))
+        + rowHtml('Units charged a month', (a) => a.chosen ? bar(a) : none(a))
+        + rowHtml('Share found', (a) => a.chosen ? '<span class="num">' + pct(a.chosen.recall) + '</span> <span class="dim">quiet-root ' + pct(a.quiet) + '</span>' : none(a))
+        + rowHtml('Spent on finding, not reading', (a) => a.chosen ? '<span class="num">' + pct(1 - a.chosen.reading / a.chosen.cost) + '</span>' : none(a))
+        + rowHtml('Root search alone, at half the size', (a) => a.rootOnly ? '<span class="num">' + pct(a.rootOnly.recall) + '</span> <span class="dim">at ' + int(a.rootOnly.T) + '+ replies, ' + big(a.rootOnly.cost * R) + ' units</span>' : none(a))
+        + rowHtml('Smallest size the quota reaches', (a) => a.reach ? '<span class="num">about ' + int(a.reach.size) + '+</span>' : a.status === 'empty' ? none(a) : '<span class="dim">none tried</span>')
         + '</tbody></table>';
       host.querySelectorAll('button[data-sc]').forEach((b) => b.addEventListener('click', () => applyScenario(b.dataset.sc)));
     };
@@ -829,16 +888,16 @@
     const step = () => {
       if (token !== rangeToken || i >= names.length) return;
       const name = names[i++], t = scenarioTable(name);
-      const pop = COST.buildPop(t.w, t.ws, { cap: state.cap || Infinity, descendants: state.minReplies === 'all' });
+      const pop = COST.buildPop(t.w, t.ws, { wq: t.wq, cap: state.cap || Infinity, descendants: state.minReplies === 'all' });
       const a = analyse(pop, false), j100 = E.indexOf(100);
       a.share100 = pop.tierS[j100] - pop.tierW[j100];
-      a.quietShare = pop.tierW[a.cutBin] ? pop.tierQuiet[a.cutBin] / pop.tierW[a.cutBin] : null;
+      a.quietShare = a.at && pop.tierW[a.cutBin] ? pop.tierQuiet[a.cutBin] / pop.tierW[a.cutBin] : null;
       a.quiet = a.chosen ? COST.coverage(pop, a.chosen).foundQuiet : null;
-      a.rootOnly = state.allowRoot ? COST.rootPolicy(pop, a.pr, a.cutBin, Math.max(1, Math.floor(E[a.cutBin] / 2)), true) : null;
+      a.rootOnly = a.at && state.allowRoot ? COST.rootPolicy(pop, a.pr, a.cutBin, Math.max(1, Math.floor(E[a.cutBin] / 2)), true) : null;
       cols[name] = a; draw(); setTimeout(step, 0);
     };
     setTimeout(step, 0);
-    document.getElementById('sub-range').textContent = 'The same quota, prices and research choices under each scenario, for conversations of ' + int(state.cut) + '+ posts with ' + Math.round(100 * state.recall) + '% to be found. Select a column to load it.';
+    document.getElementById('sub-range').textContent = 'The same quota, prices and research choices under each scenario, for conversations of ' + int(state.cut) + '+ posts with ' + need + ' to be found. Select a column to load it.';
   }
 
   /* ====================================================================== wiring */

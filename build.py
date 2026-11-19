@@ -12,7 +12,7 @@ src = lambda n: (here / "src" / n).read_text()
 sim = src("sim.js")
 head = """<title>Reply Tree Collection Planner</title>
 <meta name="claude:viewport-fit-sides" content="cover">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Serif:ital@1&display=swap">
 <style>
 """ + src("style.css") + "</style>\n"
 scripts = "\n".join(

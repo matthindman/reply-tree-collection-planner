@@ -152,3 +152,17 @@ table.range .chip { display: inline-block; width: 9px; height: 9px; border-radiu
 .pair.inner { gap: 28px; }
 .pair.inner > div { min-width: 0; }
 @media (max-width: 860px) { .model-text { grid-template-columns: minmax(0, 1fr); } }
+
+ol.eqs { margin: 4px 0 8px; padding-left: 20px; font-size: 13.5px; color: var(--ink-2); max-width: 96ch; }
+ol.eqs li { margin: 5px 0; line-height: 1.6; }
+ol.eqs b { color: var(--ink); font-weight: 600; }
+ol.eqs i, .card p.sub i, table.ptable i { font-family: "IBM Plex Serif", Georgia, "Times New Roman", serif; font-style: italic; }
+table.ptable { border-collapse: collapse; width: 100%; min-width: 760px; font-size: 13px; }
+table.ptable th, table.ptable td { text-align: left; vertical-align: top; padding: 7px 12px 7px 0; border-top: 1px solid var(--line); }
+table.ptable thead th { border-top: 0; font-weight: 600; color: var(--ink-3); font-size: 11.5px; letter-spacing: 0.05em; text-transform: uppercase; }
+table.ptable td.sym { white-space: nowrap; font-size: 14px; color: var(--ink); }
+table.ptable td.sym small { display: block; font: 10.5px var(--mono); color: var(--ink-3); }
+table.ptable td.val { font-family: var(--mono); font-variant-numeric: tabular-nums; white-space: nowrap; color: var(--ink); }
+table.ptable td.ctl { color: var(--ink); }
+table.ptable td.ctl.none { color: var(--ink-3); }
+table.ptable tr.sec td { border-top: 1px solid var(--line-2); padding-top: 12px; font-weight: 600; color: var(--ink); }

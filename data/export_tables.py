@@ -3,7 +3,7 @@
 usage: python3 export_tables.py REPO JAPAN_SIM_NPZ OUT_JS
 Reads the same inputs as ../collection_strategy_2026_11_19/cost_model.py. Output: a JS file defining
 REF_TABLES = {japan2011: {...}, usArchives: {...}}, each a sparse list of cells
-[sizeBin, rootBin, conversations per reply, mean size].
+[sizeBin, rootBin, conversations per reply, mean size, share that are quiet-root].
 """
 import json, sys
 from pathlib import Path
@@ -28,8 +28,9 @@ def table(S, K, w):
     nb = len(E); key = i * nb + k
     W = np.bincount(key, weights=w, minlength=nb * nb)
     WS = np.bincount(key, weights=w * S, minlength=nb * nb)
+    WQ = np.bincount(key, weights=w * (K < (S - 1) / 2), minlength=nb * nb)     # quiet-root: under half the replies answer the root
     nz = np.flatnonzero(W)
-    cells = [[int(c // nb), int(c % nb), float(f"{W[c]:.6g}"), float(f"{WS[c] / W[c]:.6g}")] for c in nz]
+    cells = [[int(c // nb), int(c % nb), float(f"{W[c]:.6g}"), float(f"{WS[c] / W[c]:.6g}"), float(f"{WQ[c] / W[c]:.4g}")] for c in nz]
     summ = dict(conversations_per_M=1e6 * float(w.sum()),
                 share100=float((w * (S - 1))[S >= 100].sum()), share1000=float((w * (S - 1))[S >= 1000].sum()),
                 trees100_per_M=1e6 * float(w[S >= 100].sum()),

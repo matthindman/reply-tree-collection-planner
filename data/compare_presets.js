@@ -11,7 +11,7 @@ function stats(p, seed) {
     o.conv += x; o.direct += x * Math.min(kmid, m - 1);
     for (const s of [10, 20, 50, 100, 200, 500, 1000, 10000]) if (E[i] >= s) o['s' + s] += rp;
     if (E[k] === 1) o.k1 += x; for (const s of [5, 10, 25, 50, 100, 1000]) if (E[k] >= s) o['k' + s] += x;
-    if (E[i] >= 100) { o.c100 += x; if (kmid < (m - 1) / 2) o.quiet += x; if (kmid <= 2) o.kle2 += x; o.direct100 += x * Math.min(kmid, m - 1); }
+    if (E[i] >= 100) { o.c100 += x; o.quiet += r.WQ[c]; if (kmid <= 2) o.kle2 += x; o.direct100 += x * Math.min(kmid, m - 1); }
     if (E[i] >= 1000) o.c1000 += x;
   }
   const out = { trees: r.trees };
@@ -20,7 +20,7 @@ function stats(p, seed) {
   out.rootsK1 = o.k1 / o.conv; for (const s of [5, 10, 25, 50, 100, 1000]) out['rootsK' + s] = o['k' + s] / o.conv;
   out.driven = 1 - o.quiet / o.c100; out.kle2 = o.kle2 / o.c100; out.directAll = o.direct / rep; out.direct100 = o.direct100 / o.s100;
   // root search at each threshold: recall of 100+ conversations and of their replies
-  const t = G.normalise(r.W, r.WS), pop = C.buildPop(t.w, t.ws), j = E.indexOf(100);
+  const t = G.normalise(r.W, r.WS, r.WQ), pop = C.buildPop(t.w, t.ws, { wq: t.wq }), j = E.indexOf(100);
   for (const T of [10, 25, 50, 100]) { const pol = C.rootPolicy(pop, {}, j, T, true); out['rootT' + T] = pol.recall; out['candT' + T] = 1e6 * pol.cand; }
   return out;
 }

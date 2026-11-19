@@ -79,6 +79,18 @@
           <div><h4>Each reply is answered, or not</h4><p>An answered reply usually gets exactly one reply, and that is what builds a back-and-forth exchange. The chance is lower under a popular root and differs from one conversation to the next. The two <em>get an answer</em> controls and <em>Difference between conversations</em> set it.</p></div>
           <div><h4>Now and then an exchange splits</h4><p>A reply that ends an exchange sometimes draws several replies at once, each starting a new exchange. <em>Side threads</em> sets how often.</p></div>
         </div>
+        <h4 class="fig">The equations</h4>
+        <ol class="eqs">
+          <li><b>Direct replies to the root, <i>K</i>.</b> <i>K</i> = &lfloor;e<sup><i>Z</i></sup>&rfloor;. With probability <i>w</i> the root is ordinary and <i>Z</i> is Normal with mean &minus;<i>a</i><sub>1</sub>/<i>t</i><sub>1</sub><sup>2</sup> and standard deviation 1/<i>t</i><sub>1</sub>; otherwise it is popular and <i>Z</i> is Normal with mean &minus;<i>a</i><sub>2</sub>/<i>t</i><sub>2</sub><sup>2</sup> and standard deviation 1/<i>t</i><sub>2</sub>. Only <i>Z</i> &ge; 0 is kept, so <i>K</i> &ge; 1.</li>
+          <li><b>How persistent the conversation is, <i>&theta;</i>.</b> <i>&theta;</i> is Normal(0, 1), drawn once per conversation. Write <i>x</i> = ln <i>K</i>.</li>
+          <li><b>A reply to the root</b> gets exactly one reply with probability <i>q</i><sub>1</sub> = logistic(<i>c</i><sub>0</sub> &minus; <i>c</i><sub>1</sub><i>x</i> + <i>s</i><sub>1</sub><i>&theta;</i>).</li>
+          <li><b>A later reply</b>, in exchange <i>j</i>, gets exactly one reply with probability <i>q</i><sub>2</sub> = logistic(<i>&mu;</i> &minus; <i>&gamma;x</i> + <i>&sigma;&theta;</i> + <i>&tau;&epsilon;<sub>j</sub></i>), where <i>&epsilon;<sub>j</sub></i> is Normal(0, 1), drawn once per exchange.</li>
+          <li><b>When an exchange ends</b>, its last reply splits with probability <i>&phi;</i> = <i>&kappa;</i> / (1 + &zeta;(<i>&alpha;</i>)) into <i>D</i> &ge; 2 replies, with P(<i>D</i> &ge; <i>d</i>) = (<i>d</i> &minus; 1)<sup>&minus;<i>&alpha;</i></sup>. After a reply to the root, <i>&kappa;</i> = logistic(<i>g</i><sub>0</sub> + <i>f</i><sub>1</sub><i>x</i>) and <i>&alpha;</i> = 1 + (<i>&alpha;</i><sub>0</sub> &minus; 1)<i>K</i><sup>&minus;<i>b</i><sub>1</sub></sup>. After a later reply, <i>&kappa;</i> = logistic(<i>f</i><sub>0</sub> + <i>f</i><sub>1</sub><i>x</i>) and <i>&alpha;</i> = 1 + (<i>&alpha;</i><sub>0</sub> &minus; 1)<i>K</i><sup>&minus;<i>b</i><sub>2</sub></sup>.</li>
+        </ol>
+        <p class="sub">logistic(<i>z</i>) = 1 / (1 + e<sup>&minus;<i>z</i></sup>). &zeta; is the Riemann zeta function, so <i>&kappa;</i> is the average number of new exchanges started when one ends. It is always below 1, which keeps every conversation finite.</p>
+        <h4 class="fig" style="margin-top:16px">What each parameter does</h4>
+        <p class="sub">Eighteen parameters. The values shown are the ones in use now and change as you move a control. Six controls on the left move ten of them; the rest can be typed under &ldquo;All 18 model parameters&rdquo;.</p>
+        <div class="scroll" id="model-params"></div>
         <div class="pair inner">
           <div>
             <h4 class="fig">Direct replies to a root</h4>
@@ -100,10 +112,13 @@
       <section class="foot">
         <h3>How to read this</h3>
         <ul>
-          <li>Conversations are drawn from the stochastic reply-tree model. The page opens on our best guess for Japanese X today: a full setting of that model that puts about 12% of replies in conversations of 100+ posts. The link between a conversation's size and its root's direct replies is the model's, not a measurement.</li>
-          <li>Costs follow X's public price list: one unit per post returned, with the count, stream and billing assumptions set in the rail. Nothing here has been tested on a paid account.</li>
+          <li>Conversations are drawn from the reply-tree model described above. The page opens on a working guess for Japanese X today. It is not a measurement: no measurement of Japanese reply trees after 2011 was found.</li>
+          <li>Charges are in units. One unit is the charge for one post on X's public price list; counts and other charges are converted at the prices on the left. Whether they draw on your quota depends on the contract. Nothing here has been tested on a paid account.</li>
+          <li>Monthly volume and conversation shape rest on different counts. The default volume is an estimate of Japanese-written replies; the shapes describe conversations under Japanese roots.</li>
+          <li>The plan shown is the best of those tried: root search, a reply sample, or both; with or without a count; keeping all candidates or a random share. Sizes and thresholds are tried on a grid, so &ldquo;smallest size&rdquo; means the smallest size tried.</li>
           <li>The model is static. A conversation is judged on its final size; waiting times, deletions and replies not tagged as Japanese are not modelled.</li>
-          <li>The best guess and its variants come from two independent desk analyses of late-2026 Japanese X (GPT Pro and Claude Opus). They agree on sizes and differ on how many large conversations are quiet-root. Neither is a measurement, and no post-2011 measurement of Japanese reply trees was found.</li>
+          <li>Scenarios are what-if cases, not probability bounds. Low end and High end change only the share of popular roots, which also changes how many conversations are quiet-root.</li>
+          <li>Moving a model control starts a fresh simulation, whose results carry a few percent of sampling noise. The scenario buttons load larger, steadier runs.</li>
           <li id="foot-build"></li>
         </ul>
       </section>

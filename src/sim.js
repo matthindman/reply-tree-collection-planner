@@ -150,7 +150,7 @@
   ];
 
   /* Runs `rounds` rounds of about `budget` simulated posts each. onRound receives cumulative sums:
-     W[i*NB+k] (conversations), WS (posts), with i the size bin and k the root-reply bin, expressed
+     W[i*NB+k] (conversations), WS (posts), WQ (quiet-root conversations), with i the size bin and k the root-reply bin, expressed
      per simulated conversation of the model; divide WS-W by itself to normalise per reply. */
   function simulate(P, opts, onRound) {
     const seed = opts.seed || 20261119, rounds = opts.rounds || 8, budget = opts.budget || 2.5e6;
@@ -171,8 +171,8 @@
       for (let i = 0; i < n; i++) { const [x, th] = draw(s, pilotRng); posts += pilotSim(Math.max(1, Math.floor(Math.exp(x))), th); }
       s.n = Math.max(200, Math.min(4e6, Math.round(budget * s.share / (posts / n))));
     }
-    const W = new Float64Array(NB * NB), WS = new Float64Array(NB * NB);
-    let excess = 0, trees = 0;
+    const W = new Float64Array(NB * NB), WS = new Float64Array(NB * NB), WQ = new Float64Array(NB * NB);
+    let excess = 0, capped = 0, trees = 0;
     const t0 = Date.now();
     for (let r = 0; r < rounds; r++) {
       const rng = makeRng(seed + 7919 * (r + 1)), sim = makeTreeSim(P, rng);
@@ -188,23 +188,25 @@
           const K = Math.max(1, Math.floor(Math.exp(x)));
           const S = sim(K, theta);
           if (S >= MAX_POSTS) excess += 1 / den;
+          if (x >= X_MAX - 1e-9) capped += 1 / den;          // root count hit the table's upper limit
           const cell = binOf(S) * NB + binOf(K), w = 1 / den;
           W[cell] += w; WS[cell] += w * S;
+          if (K < (S - 1) / 2) WQ[cell] += w;               // quiet-root: fewer than half the replies answer the root
         }
         trees += s.n;
       }
-      if (onRound) onRound({ round: r + 1, rounds, W, WS, trees, excess: excess / (r + 1), ms: Date.now() - t0 });
+      if (onRound) onRound({ round: r + 1, rounds, W, WS, WQ, trees, excess: excess / (r + 1), capped: capped / (r + 1), ms: Date.now() - t0 });
     }
-    return { W, WS, rounds, trees, excess: excess / rounds };
+    return { W, WS, WQ, rounds, trees, excess: excess / rounds, capped: capped / rounds };
   }
 
   /* Turn cumulative sums into a population table: conversations and posts per reply, by cell. */
-  function normalise(W, WS) {
+  function normalise(W, WS, WQ) {
     let replies = 0;
     for (let c = 0; c < W.length; c++) replies += WS[c] - W[c];
-    const w = new Float64Array(W.length), ws = new Float64Array(W.length);
-    for (let c = 0; c < W.length; c++) { w[c] = W[c] / replies; ws[c] = WS[c] / replies; }
-    return { w, ws };
+    const w = new Float64Array(W.length), ws = new Float64Array(W.length), wq = WQ ? new Float64Array(W.length) : null;
+    for (let c = 0; c < W.length; c++) { w[c] = W[c] / replies; ws[c] = WS[c] / replies; if (wq) wq[c] = WQ[c] / replies; }
+    return { w, ws, wq };
   }
 
   const api = { EDGES, NB, binOf, simulate, normalise, logQ, zeta, rootTable, invRoot, DX, X_MAX };
@@ -215,8 +217,8 @@
     root.onmessage = (ev) => {
       const { id, params, opts } = ev.data;
       simulate(params, opts || {}, (st) => {
-        root.postMessage({ id, round: st.round, rounds: st.rounds, trees: st.trees, excess: st.excess, ms: st.ms,
-                           W: st.W.slice(), WS: st.WS.slice() });
+        root.postMessage({ id, round: st.round, rounds: st.rounds, trees: st.trees, excess: st.excess, capped: st.capped, ms: st.ms,
+                           W: st.W.slice(), WS: st.WS.slice(), WQ: st.WQ.slice() });
       });
     };
   }

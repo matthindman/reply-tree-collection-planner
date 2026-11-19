@@ -21,12 +21,11 @@ function applyKnobs(base, knobs) {
   return p;
 }
 function summarise(r) {
-  const { w, ws } = G.normalise(r.W, r.WS), cells = []; const o = { share100: 0, share1000: 0, conv100: 0, quiet: 0 };
+  const { w, ws, wq } = G.normalise(r.W, r.WS, r.WQ), cells = []; const o = { share100: 0, share1000: 0, conv100: 0, quiet: 0 };
   for (let i = 0; i < NB; i++) for (let j = 0; j < NB; j++) {
     const c = i * NB + j; if (!w[c]) continue; const m = ws[c] / w[c];
-    cells.push([i, j, +w[c].toPrecision(6), +m.toPrecision(6)]);
-    const kmid = j < 20 ? E[j] : Math.sqrt(E[j] * ((j + 1 < NB ? E[j + 1] : 2 * E[j]) - 1));
-    if (E[i] >= 100) { o.share100 += ws[c] - w[c]; o.conv100 += w[c]; if (kmid < (m - 1) / 2) o.quiet += w[c]; }
+    cells.push([i, j, +w[c].toPrecision(6), +m.toPrecision(6), +(wq[c] / w[c]).toFixed(4)]);
+    if (E[i] >= 100) { o.share100 += ws[c] - w[c]; o.conv100 += w[c]; o.quiet += wq[c]; }
     if (E[i] >= 1000) o.share1000 += ws[c] - w[c];
   }
   return { cells, share100: o.share100, share1000: o.share1000, conv100: 1e6 * o.conv100, driven: 1 - o.quiet / o.conv100 };
