@@ -2,7 +2,7 @@
   <header class="top">
     <div>
       <h1>Reply Tree Collection Planner</h1>
-      <p>Set what you believe about Japanese-language X, the contract and the research goal. Everything on the right updates as you move a control: what to collect, what it costs, and who the collection would miss.</p>
+      <p>Set your assumptions on the left. The right side shows the plan, what it costs and which conversations it misses, and updates as you go.</p>
     </div>
     <div class="top-actions">
       <span class="status" id="status"></span>
@@ -73,11 +73,11 @@
 
       <section class="card">
         <h3>The model behind the conversations</h3>
-        <p class="sub">Every conversation in this planner is drawn from one stochastic model with three parts. The pictures below follow the model controls on the left, so you can see what each one does.</p>
+        <p class="sub">The planner draws every conversation from one model with three parts. The charts below change as you move the model controls on the left.</p>
         <div class="model-text">
-          <div><h4>A root draws its direct replies</h4><p>Most roots get a single reply. A small popular group gets tens, hundreds or thousands. <em>Roots in the popular group</em> sets how many roots belong to it; <em>Reach of the most popular posts</em> stretches how far it runs.</p></div>
-          <div><h4>Each reply is answered, or not</h4><p>An answered reply usually gets exactly one reply, and that is what builds a back-and-forth exchange. The chance is lower under a popular root and differs from one conversation to the next. The two <em>get an answer</em> controls and <em>Difference between conversations</em> set it.</p></div>
-          <div><h4>Now and then an exchange splits</h4><p>A reply that ends an exchange sometimes draws several replies at once, each starting a new exchange. <em>Side threads</em> sets how often.</p></div>
+          <div><h4>A root draws its direct replies</h4><p>Most roots get one reply. A small popular group gets tens, hundreds or thousands. <em>Roots in the popular group</em> sets how many roots are in that group; <em>Reach of the most popular posts</em> sets how large they get.</p></div>
+          <div><h4>Each reply is answered, or not</h4><p>A reply that is answered usually gets exactly one reply, which is how a back-and-forth exchange grows. The chance is lower under a popular root and varies between conversations. The two <em>get an answer</em> controls and <em>Difference between conversations</em> set it.</p></div>
+          <div><h4>Now and then an exchange splits</h4><p>The last reply in an exchange sometimes draws several replies at once, and each starts a new exchange. <em>Side threads</em> sets how often.</p></div>
         </div>
         <h4 class="fig">The equations</h4>
         <ol class="eqs">
@@ -89,7 +89,7 @@
         </ol>
         <p class="sub">logistic(<i>z</i>) = 1 / (1 + e<sup>&minus;<i>z</i></sup>). &zeta; is the Riemann zeta function, so <i>&kappa;</i> is the average number of new exchanges started when one ends. It is always below 1, which keeps every conversation finite.</p>
         <h4 class="fig" style="margin-top:16px">What each parameter does</h4>
-        <p class="sub">Eighteen parameters. The values shown are the ones in use now and change as you move a control. Six controls on the left move ten of them; the rest can be typed under &ldquo;All 18 model parameters&rdquo;.</p>
+        <p class="sub">The model has eighteen parameters. The values shown are in use now and change as you move a control. Six controls on the left move ten of them; the other eight can be typed under &ldquo;All 18 model parameters&rdquo;.</p>
         <div class="scroll" id="model-params"></div>
         <div class="pair inner">
           <div>
@@ -105,7 +105,7 @@
           </div>
         </div>
         <h4 class="fig" style="margin-top:18px">Eight conversations drawn from the model</h4>
-        <p class="sub">The same eight draws are redrawn as the controls move, so each picture changes shape instead of being replaced. The dark dot is the root, grey dots answer the root directly, and violet dots answer another reply.</p>
+        <p class="sub">Each picture uses the same random draw every time, so moving a control changes its shape. The dark dot is the root. Grey dots reply to the root; violet dots reply to another reply.</p>
         <div class="chart" id="ch-trees"></div>
       </section>
 

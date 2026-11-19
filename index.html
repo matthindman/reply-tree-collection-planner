@@ -183,7 +183,7 @@ table.ptable tr.sec td { border-top: 1px solid var(--line-2); padding-top: 12px;
   <header class="top">
     <div>
       <h1>Reply Tree Collection Planner</h1>
-      <p>Set what you believe about Japanese-language X, the contract and the research goal. Everything on the right updates as you move a control: what to collect, what it costs, and who the collection would miss.</p>
+      <p>Set your assumptions on the left. The right side shows the plan, what it costs and which conversations it misses, and updates as you go.</p>
     </div>
     <div class="top-actions">
       <span class="status" id="status"></span>
@@ -254,11 +254,11 @@ table.ptable tr.sec td { border-top: 1px solid var(--line-2); padding-top: 12px;
 
       <section class="card">
         <h3>The model behind the conversations</h3>
-        <p class="sub">Every conversation in this planner is drawn from one stochastic model with three parts. The pictures below follow the model controls on the left, so you can see what each one does.</p>
+        <p class="sub">The planner draws every conversation from one model with three parts. The charts below change as you move the model controls on the left.</p>
         <div class="model-text">
-          <div><h4>A root draws its direct replies</h4><p>Most roots get a single reply. A small popular group gets tens, hundreds or thousands. <em>Roots in the popular group</em> sets how many roots belong to it; <em>Reach of the most popular posts</em> stretches how far it runs.</p></div>
-          <div><h4>Each reply is answered, or not</h4><p>An answered reply usually gets exactly one reply, and that is what builds a back-and-forth exchange. The chance is lower under a popular root and differs from one conversation to the next. The two <em>get an answer</em> controls and <em>Difference between conversations</em> set it.</p></div>
-          <div><h4>Now and then an exchange splits</h4><p>A reply that ends an exchange sometimes draws several replies at once, each starting a new exchange. <em>Side threads</em> sets how often.</p></div>
+          <div><h4>A root draws its direct replies</h4><p>Most roots get one reply. A small popular group gets tens, hundreds or thousands. <em>Roots in the popular group</em> sets how many roots are in that group; <em>Reach of the most popular posts</em> sets how large they get.</p></div>
+          <div><h4>Each reply is answered, or not</h4><p>A reply that is answered usually gets exactly one reply, which is how a back-and-forth exchange grows. The chance is lower under a popular root and varies between conversations. The two <em>get an answer</em> controls and <em>Difference between conversations</em> set it.</p></div>
+          <div><h4>Now and then an exchange splits</h4><p>The last reply in an exchange sometimes draws several replies at once, and each starts a new exchange. <em>Side threads</em> sets how often.</p></div>
         </div>
         <h4 class="fig">The equations</h4>
         <ol class="eqs">
@@ -270,7 +270,7 @@ table.ptable tr.sec td { border-top: 1px solid var(--line-2); padding-top: 12px;
         </ol>
         <p class="sub">logistic(<i>z</i>) = 1 / (1 + e<sup>&minus;<i>z</i></sup>). &zeta; is the Riemann zeta function, so <i>&kappa;</i> is the average number of new exchanges started when one ends. It is always below 1, which keeps every conversation finite.</p>
         <h4 class="fig" style="margin-top:16px">What each parameter does</h4>
-        <p class="sub">Eighteen parameters. The values shown are the ones in use now and change as you move a control. Six controls on the left move ten of them; the rest can be typed under &ldquo;All 18 model parameters&rdquo;.</p>
+        <p class="sub">The model has eighteen parameters. The values shown are in use now and change as you move a control. Six controls on the left move ten of them; the other eight can be typed under &ldquo;All 18 model parameters&rdquo;.</p>
         <div class="scroll" id="model-params"></div>
         <div class="pair inner">
           <div>
@@ -286,7 +286,7 @@ table.ptable tr.sec td { border-top: 1px solid var(--line-2); padding-top: 12px;
           </div>
         </div>
         <h4 class="fig" style="margin-top:18px">Eight conversations drawn from the model</h4>
-        <p class="sub">The same eight draws are redrawn as the controls move, so each picture changes shape instead of being replaced. The dark dot is the root, grey dots answer the root directly, and violet dots answer another reply.</p>
+        <p class="sub">Each picture uses the same random draw every time, so moving a control changes its shape. The dark dot is the root. Grey dots reply to the root; violet dots reply to another reply.</p>
         <div class="chart" id="ch-trees"></div>
       </section>
 
@@ -860,7 +860,7 @@ const SIM_SOURCE = "/* sim.js \u2014 the stochastic reply-tree model (GRT, 18 pa
 
   /* ====================================================================== CONFIG */
   const CONFIG = {
-    version: 'Draft 9 · 19 November 2026',
+    version: 'Draft 10 · 19 November 2026',
     // Fitted parameters of the reply-tree model (general_model/fits). Japan 2011 is the default.
     models: {
       // Best guess for Japanese X today: a full parameter set calibrated to the prior assessments (data/calibrate_today.js).
@@ -969,15 +969,15 @@ const SIM_SOURCE = "/* sim.js \u2014 the stochastic reply-tree model (GRT, 18 pa
       { key: 'mix', kind: 'range', label: 'Replies in broadcast-style conversation', min: 0, max: 100, step: 1, fmt: (v) => v + '%',
         hint: 'Blends in conversations like those in the US news and election archives.' },
       { key: 'pop', kind: 'log', label: 'Roots in the popular group', min: 0.1, max: 6, fmt: () => pct(Math.min(0.95, Math.max(0.001, (1 - baseParams().w) * state.pop))),
-        hint: 'Share of roots drawn from the broad group that supplies popular posts. The main control on concentration.' },
+        hint: 'Share of roots in the group that supplies popular posts. The main control on how concentrated replies are.' },
       { key: 'lam', kind: 'range', label: 'Reach of the most popular posts', min: 0.6, max: 1.6, step: 0.02, fmt: (v) => '×' + v.toFixed(2),
-        hint: 'Stretches the tail of direct replies to a root.' },
+        hint: 'How many direct replies the most popular roots get.' },
       { key: 'dC0', kind: 'range', label: 'Direct replies that get an answer', min: -3, max: 2, step: 0.05, fmt: () => pct(answerParts(modelParams(), 1, 0, true).any),
         hint: 'Chance of at least one reply, under a root with one reply, in a typical conversation.' },
       { key: 'dMu', kind: 'range', label: 'Later replies that get an answer', min: -1.5, max: 2, step: 0.05, fmt: () => pct(answerParts(modelParams(), 1, 0, false).any),
         hint: 'The same chance for a reply to another reply. Higher means longer exchanges.' },
       { key: 'sigScale', kind: 'range', label: 'Difference between conversations', min: 0.4, max: 1.6, step: 0.02, fmt: (v) => '×' + v.toFixed(2),
-        hint: 'How much more persistent some conversations are than others.' },
+        hint: 'How much conversations differ in how long their exchanges run.' },
       { key: 'dBranch', kind: 'range', label: 'Side threads', min: -1.5, max: 1.5, step: 0.05, fmt: () => pct(answerParts(modelParams(), 1, 0, false).phi),
         hint: 'Chance that an exchange splits into several when it ends.' },
       { kind: 'facts', id: 'facts-pop' },
@@ -1663,7 +1663,7 @@ const SIM_SOURCE = "/* sim.js \u2014 the stochastic reply-tree model (GRT, 18 pa
       ['Conversations of 100+ per million replies', big(1e6 * pop.tierW[j100])],
       ['Of those, quiet-root', pop.tierW[j100] ? pct(pop.tierQuiet[j100] / pop.tierW[j100]) : '–'],
     ]);
-    facts('facts-scale', [['Quota as a share of the charge for every reply', pct(d.budget)], ['Conversations of ' + sizeTxt + ' a month', at ? big(at.tierW * R) : 'none']]);
+    facts('facts-scale', [['Quota, as a share of reading every reply once', pct(d.budget)], ['Conversations of ' + sizeTxt + ' a month', at ? big(at.tierW * R) : 'none']]);
     // verdict
     const pill = document.getElementById('pill'), head = document.getElementById('headline'), rec = document.getElementById('recipe');
     const setPill = (cls, t) => { pill.className = 'pill ' + cls; pill.textContent = t; };
@@ -1693,7 +1693,7 @@ const SIM_SOURCE = "/* sim.js \u2014 the stochastic reply-tree model (GRT, 18 pa
       : '<b>' + (pending ? 'Simulating' : 'Simulated') + '</b> · ' + big(tableInfo.trees) + ' conversations' + (pending ? ' · pass ' + tableInfo.round + ' of ' + tableInfo.rounds : '')
         + (tableInfo.excess > 1e-9 || tableInfo.capped > 1e-9 ? ' · the largest conversations exceed the simulator’s limit and are understated' : '');
     document.getElementById('foot-build').textContent = CONFIG.version + '. Quota and monthly reply volume are placeholders until the contract and the 2024 data say otherwise.';
-    document.getElementById('sub-pop').textContent = 'How concentrated replies are. The two grey lines are the reference data sets; the black line is what the settings on the left imply.';
+    document.getElementById('sub-pop').textContent = 'How concentrated replies are. The grey lines are the two reference data sets; the black line is your settings.';
     const clear = (ids) => ids.forEach((id) => { const h = document.getElementById(id); h.querySelectorAll('svg').forEach((x) => x.remove()); });
     if (!at || !c) {
       clear(['ch-logic', 'ch-frontier', 'ch-bars', 'ch-reach', 'ch-cover', 'ch-shape']);
@@ -1703,10 +1703,10 @@ const SIM_SOURCE = "/* sim.js \u2014 the stochastic reply-tree model (GRT, 18 pa
     }
     // captions
     document.getElementById('sub-frontier').textContent = 'Each line is the most a strategy finds at a given monthly charge, among the plans tried, for conversations of ' + sizeTxt + '. Left of the quota line is affordable.';
-    document.getElementById('sub-bars').textContent = 'Each strategy at the cheapest setting tried that finds ' + need + ', or the most it finds within the quota. Root search is shown at half the size when finding ' + need + ' would cost more than twice the conversations themselves. The solid part is the conversations themselves.';
+    document.getElementById('sub-bars').textContent = 'What each strategy charges at its cheapest setting that finds ' + need + ', or at its best within the quota. Solid is reading the conversations; lighter is finding and counting them. Root search is shown at half the size if finding ' + need + ' would cost over twice the reading.';
     document.getElementById('sub-reach').textContent = d.reach ? 'With ' + need + ' found, this quota reaches conversations of about ' + int(d.reach.size) + '+ posts, the smallest size tried that fits. Below the quota line is affordable.'
       : 'With ' + need + ' found, this quota reaches no size tried. Below the quota line is affordable.';
-    document.getElementById('sub-cover').textContent = 'The chance that a conversation of a given size is collected, split by its shape. A gap between the two lines is a bias in the data set.';
+    document.getElementById('sub-cover').textContent = 'The chance that a conversation of a given size is collected, by shape. Where the two lines part, the data set is biased toward one shape.';
     const qs = pop.tierW[d.cutBin] ? pop.tierQuiet[d.cutBin] / pop.tierW[d.cutBin] : 0;
     document.getElementById('note-cover').textContent = 'Under these assumptions ' + pct(qs) + ' of conversations of ' + sizeTxt + ' are quiet-root. Root search sees a conversation only when its root has enough replies. A reply sample is more likely to catch a conversation the larger it is, whatever its shape.';
     drawLogic(d); drawFrontier(d); drawBars(d); drawReach(d); drawCover(d); drawShape(d); drawPop(d); drawModel();

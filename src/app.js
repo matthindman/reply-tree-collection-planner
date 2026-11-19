@@ -6,7 +6,7 @@
 
   /* ====================================================================== CONFIG */
   const CONFIG = {
-    version: 'Draft 9 · 19 November 2026',
+    version: 'Draft 10 · 19 November 2026',
     // Fitted parameters of the reply-tree model (general_model/fits). Japan 2011 is the default.
     models: {
       // Best guess for Japanese X today: a full parameter set calibrated to the prior assessments (data/calibrate_today.js).
@@ -115,15 +115,15 @@
       { key: 'mix', kind: 'range', label: 'Replies in broadcast-style conversation', min: 0, max: 100, step: 1, fmt: (v) => v + '%',
         hint: 'Blends in conversations like those in the US news and election archives.' },
       { key: 'pop', kind: 'log', label: 'Roots in the popular group', min: 0.1, max: 6, fmt: () => pct(Math.min(0.95, Math.max(0.001, (1 - baseParams().w) * state.pop))),
-        hint: 'Share of roots drawn from the broad group that supplies popular posts. The main control on concentration.' },
+        hint: 'Share of roots in the group that supplies popular posts. The main control on how concentrated replies are.' },
       { key: 'lam', kind: 'range', label: 'Reach of the most popular posts', min: 0.6, max: 1.6, step: 0.02, fmt: (v) => '×' + v.toFixed(2),
-        hint: 'Stretches the tail of direct replies to a root.' },
+        hint: 'How many direct replies the most popular roots get.' },
       { key: 'dC0', kind: 'range', label: 'Direct replies that get an answer', min: -3, max: 2, step: 0.05, fmt: () => pct(answerParts(modelParams(), 1, 0, true).any),
         hint: 'Chance of at least one reply, under a root with one reply, in a typical conversation.' },
       { key: 'dMu', kind: 'range', label: 'Later replies that get an answer', min: -1.5, max: 2, step: 0.05, fmt: () => pct(answerParts(modelParams(), 1, 0, false).any),
         hint: 'The same chance for a reply to another reply. Higher means longer exchanges.' },
       { key: 'sigScale', kind: 'range', label: 'Difference between conversations', min: 0.4, max: 1.6, step: 0.02, fmt: (v) => '×' + v.toFixed(2),
-        hint: 'How much more persistent some conversations are than others.' },
+        hint: 'How much conversations differ in how long their exchanges run.' },
       { key: 'dBranch', kind: 'range', label: 'Side threads', min: -1.5, max: 1.5, step: 0.05, fmt: () => pct(answerParts(modelParams(), 1, 0, false).phi),
         hint: 'Chance that an exchange splits into several when it ends.' },
       { kind: 'facts', id: 'facts-pop' },
@@ -809,7 +809,7 @@
       ['Conversations of 100+ per million replies', big(1e6 * pop.tierW[j100])],
       ['Of those, quiet-root', pop.tierW[j100] ? pct(pop.tierQuiet[j100] / pop.tierW[j100]) : '–'],
     ]);
-    facts('facts-scale', [['Quota as a share of the charge for every reply', pct(d.budget)], ['Conversations of ' + sizeTxt + ' a month', at ? big(at.tierW * R) : 'none']]);
+    facts('facts-scale', [['Quota, as a share of reading every reply once', pct(d.budget)], ['Conversations of ' + sizeTxt + ' a month', at ? big(at.tierW * R) : 'none']]);
     // verdict
     const pill = document.getElementById('pill'), head = document.getElementById('headline'), rec = document.getElementById('recipe');
     const setPill = (cls, t) => { pill.className = 'pill ' + cls; pill.textContent = t; };
@@ -839,7 +839,7 @@
       : '<b>' + (pending ? 'Simulating' : 'Simulated') + '</b> · ' + big(tableInfo.trees) + ' conversations' + (pending ? ' · pass ' + tableInfo.round + ' of ' + tableInfo.rounds : '')
         + (tableInfo.excess > 1e-9 || tableInfo.capped > 1e-9 ? ' · the largest conversations exceed the simulator’s limit and are understated' : '');
     document.getElementById('foot-build').textContent = CONFIG.version + '. Quota and monthly reply volume are placeholders until the contract and the 2024 data say otherwise.';
-    document.getElementById('sub-pop').textContent = 'How concentrated replies are. The two grey lines are the reference data sets; the black line is what the settings on the left imply.';
+    document.getElementById('sub-pop').textContent = 'How concentrated replies are. The grey lines are the two reference data sets; the black line is your settings.';
     const clear = (ids) => ids.forEach((id) => { const h = document.getElementById(id); h.querySelectorAll('svg').forEach((x) => x.remove()); });
     if (!at || !c) {
       clear(['ch-logic', 'ch-frontier', 'ch-bars', 'ch-reach', 'ch-cover', 'ch-shape']);
@@ -849,10 +849,10 @@
     }
     // captions
     document.getElementById('sub-frontier').textContent = 'Each line is the most a strategy finds at a given monthly charge, among the plans tried, for conversations of ' + sizeTxt + '. Left of the quota line is affordable.';
-    document.getElementById('sub-bars').textContent = 'Each strategy at the cheapest setting tried that finds ' + need + ', or the most it finds within the quota. Root search is shown at half the size when finding ' + need + ' would cost more than twice the conversations themselves. The solid part is the conversations themselves.';
+    document.getElementById('sub-bars').textContent = 'What each strategy charges at its cheapest setting that finds ' + need + ', or at its best within the quota. Solid is reading the conversations; lighter is finding and counting them. Root search is shown at half the size if finding ' + need + ' would cost over twice the reading.';
     document.getElementById('sub-reach').textContent = d.reach ? 'With ' + need + ' found, this quota reaches conversations of about ' + int(d.reach.size) + '+ posts, the smallest size tried that fits. Below the quota line is affordable.'
       : 'With ' + need + ' found, this quota reaches no size tried. Below the quota line is affordable.';
-    document.getElementById('sub-cover').textContent = 'The chance that a conversation of a given size is collected, split by its shape. A gap between the two lines is a bias in the data set.';
+    document.getElementById('sub-cover').textContent = 'The chance that a conversation of a given size is collected, by shape. Where the two lines part, the data set is biased toward one shape.';
     const qs = pop.tierW[d.cutBin] ? pop.tierQuiet[d.cutBin] / pop.tierW[d.cutBin] : 0;
     document.getElementById('note-cover').textContent = 'Under these assumptions ' + pct(qs) + ' of conversations of ' + sizeTxt + ' are quiet-root. Root search sees a conversation only when its root has enough replies. A reply sample is more likely to catch a conversation the larger it is, whatever its shape.';
     drawLogic(d); drawFrontier(d); drawBars(d); drawReach(d); drawCover(d); drawShape(d); drawPop(d); drawModel();
