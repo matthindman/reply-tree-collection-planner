@@ -71,6 +71,32 @@
         <div class="chart" id="ch-pop"></div>
       </section>
 
+      <section class="card">
+        <h3>The model behind the conversations</h3>
+        <p class="sub">Every conversation in this planner is drawn from one stochastic model with three parts. The pictures below follow the model controls on the left, so you can see what each one does.</p>
+        <div class="model-text">
+          <div><h4>A root draws its direct replies</h4><p>Most roots get a single reply. A small popular group gets tens, hundreds or thousands. <em>Roots in the popular group</em> sets how many roots belong to it; <em>Reach of the most popular posts</em> stretches how far it runs.</p></div>
+          <div><h4>Each reply is answered, or not</h4><p>An answered reply usually gets exactly one reply, and that is what builds a back-and-forth exchange. The chance is lower under a popular root and differs from one conversation to the next. The two <em>get an answer</em> controls and <em>Difference between conversations</em> set it.</p></div>
+          <div><h4>Now and then an exchange splits</h4><p>A reply that ends an exchange sometimes draws several replies at once, each starting a new exchange. <em>Side threads</em> sets how often.</p></div>
+        </div>
+        <div class="pair inner">
+          <div>
+            <h4 class="fig">Direct replies to a root</h4>
+            <p class="sub" id="sub-rootlaw"></p>
+            <div class="chart" id="ch-rootlaw"></div>
+          </div>
+          <div>
+            <h4 class="fig">Chance that a reply is answered</h4>
+            <p class="sub" id="sub-answer"></p>
+            <div class="legend" id="leg-answer"></div>
+            <div class="chart" id="ch-answer"></div>
+          </div>
+        </div>
+        <h4 class="fig" style="margin-top:18px">Eight conversations drawn from the model</h4>
+        <p class="sub">The same eight draws are redrawn as the controls move, so each picture changes shape instead of being replaced. The dark dot is the root, grey dots answer the root directly, and violet dots answer another reply.</p>
+        <div class="chart" id="ch-trees"></div>
+      </section>
+
       <section class="foot">
         <h3>How to read this</h3>
         <ul>

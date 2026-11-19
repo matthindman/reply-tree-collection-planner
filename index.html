@@ -106,7 +106,7 @@ details.more[open] > summary { margin-bottom: 10px; }
 /* ---------- cards and charts */
 .card { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 18px 20px 16px; min-width: 0; }
 .card > h3 { font-size: 16px; font-weight: 600; margin: 0 0 2px; letter-spacing: -0.005em; }
-.card > p.sub { margin: 0 0 12px; color: var(--ink-2); font-size: 13px; max-width: 78ch; }
+.card p.sub { margin: 0 0 12px; color: var(--ink-2); font-size: 13px; max-width: 78ch; }
 .pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; }
 @media (max-width: 1180px) { .pair { grid-template-columns: minmax(0, 1fr); } }
 .chart { position: relative; width: 100%; }
@@ -153,6 +153,15 @@ table.range .wait { color: var(--ink-3); }
 table.range .chip { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 6px; }
 .qbar { height: 6px; background: var(--grid); border-radius: 3px; margin: 2px 0 5px; overflow: hidden; max-width: 150px; }
 .qbar i { display: block; height: 100%; border-radius: 3px; }
+
+/* ---------- model panel */
+.model-text { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px 28px; margin: 4px 0 18px; }
+.model-text h4, h4.fig { font-size: 13.5px; font-weight: 600; margin: 0 0 3px; }
+.model-text p { margin: 0; font-size: 13px; color: var(--ink-2); }
+.model-text em { font-style: normal; color: var(--ink); font-weight: 500; }
+.pair.inner { gap: 28px; }
+.pair.inner > div { min-width: 0; }
+@media (max-width: 860px) { .model-text { grid-template-columns: minmax(0, 1fr); } }
 </style>
 </head>
 <body>
@@ -227,6 +236,32 @@ table.range .chip { display: inline-block; width: 9px; height: 9px; border-radiu
         <p class="sub" id="sub-pop"></p>
         <div class="legend" id="leg-pop"></div>
         <div class="chart" id="ch-pop"></div>
+      </section>
+
+      <section class="card">
+        <h3>The model behind the conversations</h3>
+        <p class="sub">Every conversation in this planner is drawn from one stochastic model with three parts. The pictures below follow the model controls on the left, so you can see what each one does.</p>
+        <div class="model-text">
+          <div><h4>A root draws its direct replies</h4><p>Most roots get a single reply. A small popular group gets tens, hundreds or thousands. <em>Roots in the popular group</em> sets how many roots belong to it; <em>Reach of the most popular posts</em> stretches how far it runs.</p></div>
+          <div><h4>Each reply is answered, or not</h4><p>An answered reply usually gets exactly one reply, and that is what builds a back-and-forth exchange. The chance is lower under a popular root and differs from one conversation to the next. The two <em>get an answer</em> controls and <em>Difference between conversations</em> set it.</p></div>
+          <div><h4>Now and then an exchange splits</h4><p>A reply that ends an exchange sometimes draws several replies at once, each starting a new exchange. <em>Side threads</em> sets how often.</p></div>
+        </div>
+        <div class="pair inner">
+          <div>
+            <h4 class="fig">Direct replies to a root</h4>
+            <p class="sub" id="sub-rootlaw"></p>
+            <div class="chart" id="ch-rootlaw"></div>
+          </div>
+          <div>
+            <h4 class="fig">Chance that a reply is answered</h4>
+            <p class="sub" id="sub-answer"></p>
+            <div class="legend" id="leg-answer"></div>
+            <div class="chart" id="ch-answer"></div>
+          </div>
+        </div>
+        <h4 class="fig" style="margin-top:18px">Eight conversations drawn from the model</h4>
+        <p class="sub">The same eight draws are redrawn as the controls move, so each picture changes shape instead of being replaced. The dark dot is the root, grey dots answer the root directly, and violet dots answer another reply.</p>
+        <div class="chart" id="ch-trees"></div>
       </section>
 
       <section class="foot">
@@ -464,7 +499,7 @@ if (typeof module !== 'undefined') module.exports = SCENARIO_TABLES;
     return { w, ws };
   }
 
-  const api = { EDGES, NB, binOf, simulate, normalise, logQ, zeta, rootTable, invRoot };
+  const api = { EDGES, NB, binOf, simulate, normalise, logQ, zeta, rootTable, invRoot, DX, X_MAX };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.GRT = api;
 
@@ -742,7 +777,7 @@ if (typeof module !== 'undefined') module.exports = SCENARIO_TABLES;
 
 </script>
 <script>
-const SIM_SOURCE = "/* sim.js \u2014 the stochastic reply-tree model (GRT, 18 parameters), ported from\n   reply-tree-models/claude/general_model/code/gm_model.py.\n\n   One conversation:\n     K direct replies to the root: two-component discretised lognormal mixture (w, a1, t1, a2, t2).\n     theta ~ Normal(0,1): a per-conversation trait.\n     Every reply either continues (exactly one child) or ends; an ending reply branches into D >= 2\n     children with probability phi. Chains of one-child replies are \"segments\".\n   Only the size S and K are kept, binned on the planner's grid.\n\n   Sampling: a mixture of the model itself, two \"popular root\" strata and a \"persistent dialogue\"\n   stratum, combined with balance-heuristic weights, so rare large conversations are resolved with\n   few simulated trees. Estimates are unbiased for the model.\n\n   Runs in Node (module.exports) and as a Web Worker (onmessage at the bottom). No DOM access. */\n(function (root) {\n  'use strict';\n\n  // ------------------------------------------------------------------ grid\n  function makeEdges() {\n    const e = [];\n    for (let k = 1; k <= 20; k++) e.push(k);\n    for (let dec = 10; dec < 1e7; dec *= 10)\n      for (const x of [2.5, 3, 4, 5, 6, 7.5, 10, 12.5, 15, 20]) e.push(Math.round(x * dec));\n    return e;\n  }\n  const EDGES = makeEdges();\n  const NB = EDGES.length;\n  const SMALL = new Uint8Array(4096);\n  for (let v = 1, b = 0; v < 4096; v++) { while (b + 1 < NB && EDGES[b + 1] <= v) b++; SMALL[v] = b; }\n  function binOf(v) {\n    if (v < 4096) return SMALL[v < 1 ? 1 : v | 0];\n    let lo = SMALL[4095], hi = NB - 1;\n    while (lo < hi) { const m = (lo + hi + 1) >> 1; if (EDGES[m] <= v) lo = m; else hi = m - 1; }\n    return lo;\n  }\n\n  // ------------------------------------------------------------------ special functions\n  const SQRT2 = Math.SQRT2, LOG_SQRT_2PI = 0.9189385332046727;\n  function logQ(y) {                       // log of the standard normal upper tail\n    if (y <= -2) return Math.log1p(-Math.exp(logQ(-y)));\n    if (y < 2) {                           // series for erf\n      const z = y / SQRT2; let term = z, sum = z;\n      for (let n = 1; n < 60; n++) { term *= -z * z / n; sum += term / (2 * n + 1); }\n      return Math.log(0.5 - sum / Math.sqrt(Math.PI));\n    }\n    let cf = y;                            // continued fraction, evaluated from the tail\n    for (let n = 80; n >= 1; n--) cf = y + n / cf;\n    return -0.5 * y * y - LOG_SQRT_2PI - Math.log(cf);\n  }\n  function zeta(a) {                       // Riemann zeta for a > 1, Euler-Maclaurin\n    const N = 12; let s = 0;\n    for (let n = 1; n < N; n++) s += Math.pow(n, -a);\n    return s + Math.pow(N, 1 - a) / (a - 1) + 0.5 * Math.pow(N, -a) + a * Math.pow(N, -a - 1) / 12\n      - a * (a + 1) * (a + 2) * Math.pow(N, -a - 3) / 720;\n  }\n  const logistic = (z) => 1 / (1 + Math.exp(-z));\n\n  // ------------------------------------------------------------------ random numbers\n  function makeRng(seed) {\n    let a = (seed >>> 0) || 1, spare = 0, has = false;\n    const u = () => {                      // mulberry32, uniform on (0,1)\n      a = (a + 0x6D2B79F5) | 0;\n      let t = Math.imul(a ^ (a >>> 15), 1 | a);\n      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;\n      return (((t ^ (t >>> 14)) >>> 0) + 0.5) / 4294967296;\n    };\n    const n = () => {                      // Marsaglia polar\n      if (has) { has = false; return spare; }\n      let x, y, r;\n      do { x = 2 * u() - 1; y = 2 * u() - 1; r = x * x + y * y; } while (r >= 1 || r === 0);\n      const f = Math.sqrt(-2 * Math.log(r) / r);\n      spare = y * f; has = true; return x * f;\n    };\n    return { u, n };\n  }\n\n  // ------------------------------------------------------------------ root law\n  const X_MAX = Math.log(2e6), DX = 0.004;     // conversations above 2 million direct replies are capped\n  function rootTable(P) {\n    const n = Math.ceil(X_MAX / DX) + 1, ls = new Float64Array(n);\n    const y1 = P.a1 / P.t1, y2 = P.a2 / P.t2, q1 = logQ(y1), q2 = logQ(y2);\n    const l1 = Math.log(P.w), l2 = Math.log1p(-P.w);\n    for (let i = 0; i < n; i++) {\n      const x = i * DX;\n      const A = l1 + logQ(P.t1 * x + y1) - q1, B = l2 + logQ(P.t2 * x + y2) - q2;\n      const m = Math.max(A, B);\n      ls[i] = m + Math.log(Math.exp(A - m) + Math.exp(B - m));\n    }\n    ls[0] = 0;\n    return ls;\n  }\n  function invRoot(ls, target) {               // x with log P(Z >= x) = target\n    const n = ls.length;\n    if (target <= ls[n - 1]) return X_MAX;\n    let lo = 0, hi = n - 1;\n    while (hi - lo > 1) { const m = (lo + hi) >> 1; if (ls[m] >= target) lo = m; else hi = m; }\n    const d = ls[lo] - ls[hi];\n    return (lo + (d > 0 ? (ls[lo] - target) / d : 0)) * DX;\n  }\n  function xAtSf(ls, logsf) { return invRoot(ls, logsf); }\n\n  // ------------------------------------------------------------------ one conversation\n  const MAX_POSTS = 3e6;\n  function makeTreeSim(P, rng) {\n    const cache = new Map();\n    const consts = (K) => {\n      let c = cache.get(K);\n      if (c) return c;\n      const x = Math.log(K);\n      const al1 = 1 + (P.alpha0 - 1) * Math.exp(-P.b1 * x), al2 = 1 + (P.alpha0 - 1) * Math.exp(-P.b2 * x);\n      c = { u1z: P.c0 - P.c1 * x, base: P.mu - P.gam * x, al1, al2,\n            phi1: logistic(P.g0 + P.f1 * x) / (1 + zeta(al1)), phi2: logistic(P.f0 + P.f1 * x) / (1 + zeta(al2)) };\n      if (cache.size < 20000) cache.set(K, c);\n      return c;\n    };\n    const u = rng.u, nrm = rng.n, tau = P.tau;\n    return function (K, theta) {                // returns the conversation's size (root included)\n      const c = consts(K);\n      const u1 = logistic(c.u1z + P.s1 * theta), base = c.base + P.sig * theta;\n      let size = 1, pend = 0, rootLeft = K;\n      while (rootLeft > 0 || pend > 0) {\n        const isRoot = rootLeft > 0;\n        if (isRoot) rootLeft--; else pend--;\n        const z = base + (tau > 0 ? tau * nrm() : 0);\n        const logU = z > 35 ? -Math.exp(-z) : -Math.log1p(Math.exp(-z));\n        const cont = u() < (isRoot ? u1 : Math.exp(logU));\n        let len = 1;\n        if (cont) len = 2 + Math.floor(Math.log(u()) / logU);\n        size += len;\n        if (!(size < MAX_POSTS)) return MAX_POSTS;\n        const lvl1End = isRoot && !cont;\n        if (u() < (lvl1End ? c.phi1 : c.phi2)) {\n          const logy = -Math.log(u()) / (lvl1End ? c.al1 : c.al2);\n          if (logy > 14.5) return MAX_POSTS;\n          pend += 1 + Math.floor(Math.exp(logy));\n          if (size + pend > MAX_POSTS) return MAX_POSTS;\n        }\n      }\n      return size;\n    };\n  }\n\n  // ------------------------------------------------------------------ stratified simulation\n  const STRATA = [\n    { kind: 'model', share: 0.34 },\n    { kind: 'root', sf: 1e-2, share: 0.18 },      // roots in the most popular 1%\n    { kind: 'root', sf: 2e-4, share: 0.18 },      // roots in the most popular 0.02%\n    { kind: 'trait', shift: 2.6, share: 0.30 },   // persistent dialogues\n  ];\n\n  /* Runs `rounds` rounds of about `budget` simulated posts each. onRound receives cumulative sums:\n     W[i*NB+k] (conversations), WS (posts), with i the size bin and k the root-reply bin, expressed\n     per simulated conversation of the model; divide WS-W by itself to normalise per reply. */\n  function simulate(P, opts, onRound) {\n    const seed = opts.seed || 20261119, rounds = opts.rounds || 8, budget = opts.budget || 2.5e6;\n    const ls = rootTable(P);\n    const strata = STRATA.map((s) => Object.assign({}, s));\n    for (const s of strata) if (s.kind === 'root') { s.x0 = xAtSf(ls, Math.log(s.sf)); s.logsf = Math.log(s.sf); }\n    const draw = (s, rng) => {\n      let x, theta = rng.n();\n      if (s.kind === 'root') x = invRoot(ls, Math.log(rng.u()) + s.logsf);\n      else x = invRoot(ls, Math.log(rng.u()));\n      if (s.kind === 'trait') theta += s.shift;\n      return [x, theta];\n    };\n    // pilot: mean simulated posts per conversation in each stratum\n    const pilotRng = makeRng(seed ^ 0x9E3779B9), pilotSim = makeTreeSim(P, pilotRng);\n    for (const s of strata) {\n      let posts = 0; const n = s.kind === 'model' ? 4000 : 400;\n      for (let i = 0; i < n; i++) { const [x, th] = draw(s, pilotRng); posts += pilotSim(Math.max(1, Math.floor(Math.exp(x))), th); }\n      s.n = Math.max(200, Math.min(4e6, Math.round(budget * s.share / (posts / n))));\n    }\n    const W = new Float64Array(NB * NB), WS = new Float64Array(NB * NB);\n    let excess = 0, trees = 0;\n    const t0 = Date.now();\n    for (let r = 0; r < rounds; r++) {\n      const rng = makeRng(seed + 7919 * (r + 1)), sim = makeTreeSim(P, rng);\n      for (const s of strata) {\n        for (let i = 0; i < s.n; i++) {\n          const [x, theta] = draw(s, rng);\n          let den = 0;\n          for (const q of strata) {\n            if (q.kind === 'model') den += q.n;\n            else if (q.kind === 'root') { if (x >= q.x0) den += q.n / q.sf; }\n            else den += q.n * Math.exp(q.shift * theta - 0.5 * q.shift * q.shift);\n          }\n          const K = Math.max(1, Math.floor(Math.exp(x)));\n          const S = sim(K, theta);\n          if (S >= MAX_POSTS) excess += 1 / den;\n          const cell = binOf(S) * NB + binOf(K), w = 1 / den;\n          W[cell] += w; WS[cell] += w * S;\n        }\n        trees += s.n;\n      }\n      if (onRound) onRound({ round: r + 1, rounds, W, WS, trees, excess: excess / (r + 1), ms: Date.now() - t0 });\n    }\n    return { W, WS, rounds, trees, excess: excess / rounds };\n  }\n\n  /* Turn cumulative sums into a population table: conversations and posts per reply, by cell. */\n  function normalise(W, WS) {\n    let replies = 0;\n    for (let c = 0; c < W.length; c++) replies += WS[c] - W[c];\n    const w = new Float64Array(W.length), ws = new Float64Array(W.length);\n    for (let c = 0; c < W.length; c++) { w[c] = W[c] / replies; ws[c] = WS[c] / replies; }\n    return { w, ws };\n  }\n\n  const api = { EDGES, NB, binOf, simulate, normalise, logQ, zeta, rootTable, invRoot };\n  if (typeof module !== 'undefined' && module.exports) module.exports = api;\n  else root.GRT = api;\n\n  if (typeof WorkerGlobalScope !== 'undefined' && root instanceof WorkerGlobalScope) {\n    root.onmessage = (ev) => {\n      const { id, params, opts } = ev.data;\n      simulate(params, opts || {}, (st) => {\n        root.postMessage({ id, round: st.round, rounds: st.rounds, trees: st.trees, excess: st.excess, ms: st.ms,\n                           W: st.W.slice(), WS: st.WS.slice() });\n      });\n    };\n  }\n})(typeof self !== 'undefined' ? self : globalThis);\n";
+const SIM_SOURCE = "/* sim.js \u2014 the stochastic reply-tree model (GRT, 18 parameters), ported from\n   reply-tree-models/claude/general_model/code/gm_model.py.\n\n   One conversation:\n     K direct replies to the root: two-component discretised lognormal mixture (w, a1, t1, a2, t2).\n     theta ~ Normal(0,1): a per-conversation trait.\n     Every reply either continues (exactly one child) or ends; an ending reply branches into D >= 2\n     children with probability phi. Chains of one-child replies are \"segments\".\n   Only the size S and K are kept, binned on the planner's grid.\n\n   Sampling: a mixture of the model itself, two \"popular root\" strata and a \"persistent dialogue\"\n   stratum, combined with balance-heuristic weights, so rare large conversations are resolved with\n   few simulated trees. Estimates are unbiased for the model.\n\n   Runs in Node (module.exports) and as a Web Worker (onmessage at the bottom). No DOM access. */\n(function (root) {\n  'use strict';\n\n  // ------------------------------------------------------------------ grid\n  function makeEdges() {\n    const e = [];\n    for (let k = 1; k <= 20; k++) e.push(k);\n    for (let dec = 10; dec < 1e7; dec *= 10)\n      for (const x of [2.5, 3, 4, 5, 6, 7.5, 10, 12.5, 15, 20]) e.push(Math.round(x * dec));\n    return e;\n  }\n  const EDGES = makeEdges();\n  const NB = EDGES.length;\n  const SMALL = new Uint8Array(4096);\n  for (let v = 1, b = 0; v < 4096; v++) { while (b + 1 < NB && EDGES[b + 1] <= v) b++; SMALL[v] = b; }\n  function binOf(v) {\n    if (v < 4096) return SMALL[v < 1 ? 1 : v | 0];\n    let lo = SMALL[4095], hi = NB - 1;\n    while (lo < hi) { const m = (lo + hi + 1) >> 1; if (EDGES[m] <= v) lo = m; else hi = m - 1; }\n    return lo;\n  }\n\n  // ------------------------------------------------------------------ special functions\n  const SQRT2 = Math.SQRT2, LOG_SQRT_2PI = 0.9189385332046727;\n  function logQ(y) {                       // log of the standard normal upper tail\n    if (y <= -2) return Math.log1p(-Math.exp(logQ(-y)));\n    if (y < 2) {                           // series for erf\n      const z = y / SQRT2; let term = z, sum = z;\n      for (let n = 1; n < 60; n++) { term *= -z * z / n; sum += term / (2 * n + 1); }\n      return Math.log(0.5 - sum / Math.sqrt(Math.PI));\n    }\n    let cf = y;                            // continued fraction, evaluated from the tail\n    for (let n = 80; n >= 1; n--) cf = y + n / cf;\n    return -0.5 * y * y - LOG_SQRT_2PI - Math.log(cf);\n  }\n  function zeta(a) {                       // Riemann zeta for a > 1, Euler-Maclaurin\n    const N = 12; let s = 0;\n    for (let n = 1; n < N; n++) s += Math.pow(n, -a);\n    return s + Math.pow(N, 1 - a) / (a - 1) + 0.5 * Math.pow(N, -a) + a * Math.pow(N, -a - 1) / 12\n      - a * (a + 1) * (a + 2) * Math.pow(N, -a - 3) / 720;\n  }\n  const logistic = (z) => 1 / (1 + Math.exp(-z));\n\n  // ------------------------------------------------------------------ random numbers\n  function makeRng(seed) {\n    let a = (seed >>> 0) || 1, spare = 0, has = false;\n    const u = () => {                      // mulberry32, uniform on (0,1)\n      a = (a + 0x6D2B79F5) | 0;\n      let t = Math.imul(a ^ (a >>> 15), 1 | a);\n      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;\n      return (((t ^ (t >>> 14)) >>> 0) + 0.5) / 4294967296;\n    };\n    const n = () => {                      // Marsaglia polar\n      if (has) { has = false; return spare; }\n      let x, y, r;\n      do { x = 2 * u() - 1; y = 2 * u() - 1; r = x * x + y * y; } while (r >= 1 || r === 0);\n      const f = Math.sqrt(-2 * Math.log(r) / r);\n      spare = y * f; has = true; return x * f;\n    };\n    return { u, n };\n  }\n\n  // ------------------------------------------------------------------ root law\n  const X_MAX = Math.log(2e6), DX = 0.004;     // conversations above 2 million direct replies are capped\n  function rootTable(P) {\n    const n = Math.ceil(X_MAX / DX) + 1, ls = new Float64Array(n);\n    const y1 = P.a1 / P.t1, y2 = P.a2 / P.t2, q1 = logQ(y1), q2 = logQ(y2);\n    const l1 = Math.log(P.w), l2 = Math.log1p(-P.w);\n    for (let i = 0; i < n; i++) {\n      const x = i * DX;\n      const A = l1 + logQ(P.t1 * x + y1) - q1, B = l2 + logQ(P.t2 * x + y2) - q2;\n      const m = Math.max(A, B);\n      ls[i] = m + Math.log(Math.exp(A - m) + Math.exp(B - m));\n    }\n    ls[0] = 0;\n    return ls;\n  }\n  function invRoot(ls, target) {               // x with log P(Z >= x) = target\n    const n = ls.length;\n    if (target <= ls[n - 1]) return X_MAX;\n    let lo = 0, hi = n - 1;\n    while (hi - lo > 1) { const m = (lo + hi) >> 1; if (ls[m] >= target) lo = m; else hi = m; }\n    const d = ls[lo] - ls[hi];\n    return (lo + (d > 0 ? (ls[lo] - target) / d : 0)) * DX;\n  }\n  function xAtSf(ls, logsf) { return invRoot(ls, logsf); }\n\n  // ------------------------------------------------------------------ one conversation\n  const MAX_POSTS = 3e6;\n  function makeTreeSim(P, rng) {\n    const cache = new Map();\n    const consts = (K) => {\n      let c = cache.get(K);\n      if (c) return c;\n      const x = Math.log(K);\n      const al1 = 1 + (P.alpha0 - 1) * Math.exp(-P.b1 * x), al2 = 1 + (P.alpha0 - 1) * Math.exp(-P.b2 * x);\n      c = { u1z: P.c0 - P.c1 * x, base: P.mu - P.gam * x, al1, al2,\n            phi1: logistic(P.g0 + P.f1 * x) / (1 + zeta(al1)), phi2: logistic(P.f0 + P.f1 * x) / (1 + zeta(al2)) };\n      if (cache.size < 20000) cache.set(K, c);\n      return c;\n    };\n    const u = rng.u, nrm = rng.n, tau = P.tau;\n    return function (K, theta) {                // returns the conversation's size (root included)\n      const c = consts(K);\n      const u1 = logistic(c.u1z + P.s1 * theta), base = c.base + P.sig * theta;\n      let size = 1, pend = 0, rootLeft = K;\n      while (rootLeft > 0 || pend > 0) {\n        const isRoot = rootLeft > 0;\n        if (isRoot) rootLeft--; else pend--;\n        const z = base + (tau > 0 ? tau * nrm() : 0);\n        const logU = z > 35 ? -Math.exp(-z) : -Math.log1p(Math.exp(-z));\n        const cont = u() < (isRoot ? u1 : Math.exp(logU));\n        let len = 1;\n        if (cont) len = 2 + Math.floor(Math.log(u()) / logU);\n        size += len;\n        if (!(size < MAX_POSTS)) return MAX_POSTS;\n        const lvl1End = isRoot && !cont;\n        if (u() < (lvl1End ? c.phi1 : c.phi2)) {\n          const logy = -Math.log(u()) / (lvl1End ? c.al1 : c.al2);\n          if (logy > 14.5) return MAX_POSTS;\n          pend += 1 + Math.floor(Math.exp(logy));\n          if (size + pend > MAX_POSTS) return MAX_POSTS;\n        }\n      }\n      return size;\n    };\n  }\n\n  // ------------------------------------------------------------------ stratified simulation\n  const STRATA = [\n    { kind: 'model', share: 0.34 },\n    { kind: 'root', sf: 1e-2, share: 0.18 },      // roots in the most popular 1%\n    { kind: 'root', sf: 2e-4, share: 0.18 },      // roots in the most popular 0.02%\n    { kind: 'trait', shift: 2.6, share: 0.30 },   // persistent dialogues\n  ];\n\n  /* Runs `rounds` rounds of about `budget` simulated posts each. onRound receives cumulative sums:\n     W[i*NB+k] (conversations), WS (posts), with i the size bin and k the root-reply bin, expressed\n     per simulated conversation of the model; divide WS-W by itself to normalise per reply. */\n  function simulate(P, opts, onRound) {\n    const seed = opts.seed || 20261119, rounds = opts.rounds || 8, budget = opts.budget || 2.5e6;\n    const ls = rootTable(P);\n    const strata = STRATA.map((s) => Object.assign({}, s));\n    for (const s of strata) if (s.kind === 'root') { s.x0 = xAtSf(ls, Math.log(s.sf)); s.logsf = Math.log(s.sf); }\n    const draw = (s, rng) => {\n      let x, theta = rng.n();\n      if (s.kind === 'root') x = invRoot(ls, Math.log(rng.u()) + s.logsf);\n      else x = invRoot(ls, Math.log(rng.u()));\n      if (s.kind === 'trait') theta += s.shift;\n      return [x, theta];\n    };\n    // pilot: mean simulated posts per conversation in each stratum\n    const pilotRng = makeRng(seed ^ 0x9E3779B9), pilotSim = makeTreeSim(P, pilotRng);\n    for (const s of strata) {\n      let posts = 0; const n = s.kind === 'model' ? 4000 : 400;\n      for (let i = 0; i < n; i++) { const [x, th] = draw(s, pilotRng); posts += pilotSim(Math.max(1, Math.floor(Math.exp(x))), th); }\n      s.n = Math.max(200, Math.min(4e6, Math.round(budget * s.share / (posts / n))));\n    }\n    const W = new Float64Array(NB * NB), WS = new Float64Array(NB * NB);\n    let excess = 0, trees = 0;\n    const t0 = Date.now();\n    for (let r = 0; r < rounds; r++) {\n      const rng = makeRng(seed + 7919 * (r + 1)), sim = makeTreeSim(P, rng);\n      for (const s of strata) {\n        for (let i = 0; i < s.n; i++) {\n          const [x, theta] = draw(s, rng);\n          let den = 0;\n          for (const q of strata) {\n            if (q.kind === 'model') den += q.n;\n            else if (q.kind === 'root') { if (x >= q.x0) den += q.n / q.sf; }\n            else den += q.n * Math.exp(q.shift * theta - 0.5 * q.shift * q.shift);\n          }\n          const K = Math.max(1, Math.floor(Math.exp(x)));\n          const S = sim(K, theta);\n          if (S >= MAX_POSTS) excess += 1 / den;\n          const cell = binOf(S) * NB + binOf(K), w = 1 / den;\n          W[cell] += w; WS[cell] += w * S;\n        }\n        trees += s.n;\n      }\n      if (onRound) onRound({ round: r + 1, rounds, W, WS, trees, excess: excess / (r + 1), ms: Date.now() - t0 });\n    }\n    return { W, WS, rounds, trees, excess: excess / rounds };\n  }\n\n  /* Turn cumulative sums into a population table: conversations and posts per reply, by cell. */\n  function normalise(W, WS) {\n    let replies = 0;\n    for (let c = 0; c < W.length; c++) replies += WS[c] - W[c];\n    const w = new Float64Array(W.length), ws = new Float64Array(W.length);\n    for (let c = 0; c < W.length; c++) { w[c] = W[c] / replies; ws[c] = WS[c] / replies; }\n    return { w, ws };\n  }\n\n  const api = { EDGES, NB, binOf, simulate, normalise, logQ, zeta, rootTable, invRoot, DX, X_MAX };\n  if (typeof module !== 'undefined' && module.exports) module.exports = api;\n  else root.GRT = api;\n\n  if (typeof WorkerGlobalScope !== 'undefined' && root instanceof WorkerGlobalScope) {\n    root.onmessage = (ev) => {\n      const { id, params, opts } = ev.data;\n      simulate(params, opts || {}, (st) => {\n        root.postMessage({ id, round: st.round, rounds: st.rounds, trees: st.trees, excess: st.excess, ms: st.ms,\n                           W: st.W.slice(), WS: st.WS.slice() });\n      });\n    };\n  }\n})(typeof self !== 'undefined' ? self : globalThis);\n";
 </script>
 <script>
 /* app.js — controls, live results and charts for the Reply Tree Collection Planner.
@@ -753,7 +788,7 @@ const SIM_SOURCE = "/* sim.js \u2014 the stochastic reply-tree model (GRT, 18 pa
 
   /* ====================================================================== CONFIG */
   const CONFIG = {
-    version: 'Draft 7 · 19 November 2026',
+    version: 'Draft 8 · 19 November 2026',
     // Fitted parameters of the reply-tree model (general_model/fits). Japan 2011 is the default.
     models: {
       // Best guess for Japanese X today: a full parameter set calibrated to the prior assessments (data/calibrate_today.js).
@@ -1394,6 +1429,113 @@ const SIM_SOURCE = "/* sim.js \u2014 the stochastic reply-tree model (GRT, 18 pa
     legend('leg-pop', []);
   }
 
+  /* ====================================================================== the model, pictured */
+  function seeded(seed) {                      // small seeded generator for the specimen conversations
+    let a = (seed >>> 0) || 1, spare = 0, has = false;
+    const u = () => { a = (a + 0x6D2B79F5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return (((t ^ (t >>> 14)) >>> 0) + 0.5) / 4294967296; };
+    const n = () => { if (has) { has = false; return spare; } let x, y, r; do { x = 2 * u() - 1; y = 2 * u() - 1; r = x * x + y * y; } while (r >= 1 || r === 0); const f = Math.sqrt(-2 * Math.log(r) / r); spare = y * f; has = true; return x * f; };
+    return { u, n };
+  }
+  const answerParts = (P, K, theta, direct) => {
+    const x = Math.log(K), al = 1 + (P.alpha0 - 1) * Math.exp(-(direct ? P.b1 : P.b2) * x);
+    const q = direct ? logistic(P.c0 - P.c1 * x + P.s1 * theta) : logistic(P.mu - P.gam * x + P.sig * theta);
+    const phi = logistic((direct ? P.g0 : P.f0) + P.f1 * x) / (1 + GRT.zeta(al));
+    return { q, phi, al, any: q + (1 - q) * phi };
+  };
+  /* One conversation with its structure kept. Each direct reply has its own random stream, so the same
+     draw changes smoothly as parameters move. Stops at maxNodes posts. */
+  function specimen(P, K, theta, seed, maxNodes) {
+    const nodes = [{ parent: -1, depth: 0, kids: [] }]; let cut = false;
+    const d1 = answerParts(P, K, theta, true), d2 = answerParts(P, K, theta, false), base = P.mu - P.gam * Math.log(K) + P.sig * theta;
+    const add = (parent) => { nodes.push({ parent, depth: nodes[parent].depth + 1, kids: [] }); nodes[parent].kids.push(nodes.length - 1); return nodes.length - 1; };
+    for (let i = 0; i < K && !cut; i++) {
+      const g = seeded(seed * 7919 + i * 104729 + 13), pending = [[0, true]];
+      while (pending.length && !cut) {
+        const [par, isRoot] = pending.shift();
+        const z = base + P.tau * g.n(), logU = z > 35 ? -Math.exp(-z) : -Math.log1p(Math.exp(-z));
+        const cont = g.u() < (isRoot ? d1.q : Math.exp(logU));
+        let len = 1; if (cont) len = 2 + Math.floor(Math.log(g.u()) / logU);
+        let cur = par; for (let j = 0; j < len; j++) { if (nodes.length >= maxNodes) { cut = true; break; } cur = add(cur); }
+        const end1 = isRoot && !cont;
+        if (!cut && g.u() < (end1 ? d1.phi : d2.phi)) { const D = 1 + Math.floor(Math.exp(Math.min(6, -Math.log(g.u()) / (end1 ? d1.al : d2.al)))); for (let j = 0; j < D; j++) pending.push([cur, false]); }
+      }
+    }
+    return { nodes, cut };
+  }
+  function drawModel() {
+    const P = modelParams(), P0 = CONFIG.models.japan2011.params;
+    // ---- direct replies to a root: share of roots with at least k
+    {
+      const f = frame('ch-rootlaw', 250, 'Share of roots with at least a given number of direct replies');
+      const m = { l: 54, r: 14, t: 12, b: 40 }, x0 = m.l, x1 = f.w - m.r, y0 = f.h - m.b, y1 = m.t, X = logS(1, 1e5, x0, x1), Y = logS(1e-7, 1, y0, y1);
+      for (const [v, lab] of [[1e-6, '0.0001%'], [1e-4, '0.01%'], [1e-2, '1%'], [1, '100%']]) { el('line', { x1: x0, x2: x1, y1: Y(v), y2: Y(v), stroke: 'var(--grid)' }, f.svg); el('text', { x: x0 - 8, y: Y(v) + 4, 'text-anchor': 'end', class: 'tick' }, f.svg, lab); }
+      for (const v of [1, 10, 100, 1000, 10000, 100000]) { el('line', { x1: X(v), x2: X(v), y1: y0, y2: y0 + 5, stroke: 'var(--line-2)' }, f.svg); el('text', { x: X(v), y: y0 + 18, 'text-anchor': 'middle', class: 'tick' }, f.svg, int(v)); }
+      el('line', { x1: x0, x2: x1, y1: y0, y2: y0, stroke: 'var(--line-2)' }, f.svg);
+      el('text', { x: (x0 + x1) / 2, y: f.h - 6, 'text-anchor': 'middle' }, f.svg, 'Roots with at least this many direct replies (log scales)');
+      const sf = (p) => { const ls = GRT.rootTable(p); return (k) => Math.exp(ls[Math.min(ls.length - 1, Math.round(Math.log(k) / GRT.DX))]); };
+      const cur = sf(P), ref = sf(P0), ks = []; for (let i = 0; i <= 100; i++) ks.push(Math.pow(10, i / 20));
+      const line = (fn, col, wd, dash) => { const pts = ks.map((k) => [k, fn(k)]).filter((p) => p[1] >= 1e-7).map((p) => [X(p[0]), Y(p[1])]); el('path', { d: path(pts), fill: 'none', stroke: col, 'stroke-width': wd, 'stroke-dasharray': dash }, f.svg); return pts; };
+      const rp = line(ref, 'var(--ref)', 1.5, '5 4'), cp = line(cur, 'var(--ink)', 2.5, null);
+      if (rp.length && ref(20) >= 1e-7) el('text', { x: X(20) - 8, y: Y(ref(20)) + 14, 'text-anchor': 'end' }, f.svg, 'Japan 2011 fit');
+      for (const k of [10, 100, 1000]) { const v = cur(k); if (v >= 1e-7) { el('circle', { cx: X(k), cy: Y(v), r: 3.5, fill: 'var(--surface)', stroke: 'var(--ink)', 'stroke-width': 2 }, f.svg); } }
+      document.getElementById('sub-rootlaw').textContent = pct(1 - cur(2)) + ' of roots get exactly one reply. One root in ' + int(1 / cur(100)) + ' gets 100 or more, and one in ' + int(1 / Math.max(1e-12, cur(1000))) + ' gets 1,000 or more.';
+      const cross = el('line', { y1: y1, y2: y0, stroke: 'var(--ink-3)', visibility: 'hidden' }, f.svg), ov = el('rect', { x: x0, y: y1, width: x1 - x0, height: y0 - y1, fill: 'transparent' }, f.svg);
+      ov.addEventListener('pointermove', (ev) => { const b = f.svg.getBoundingClientRect(), px = (ev.clientX - b.left) * f.w / b.width, k = Math.max(1, Math.round(X.inv(px)));
+        cross.setAttribute('x1', X(k)); cross.setAttribute('x2', X(k)); cross.setAttribute('visibility', 'visible');
+        f.showTip(X(k) * b.width / f.w, ev.clientY - b.top, '<b>' + int(k) + ' or more direct replies</b>' + row('var(--ink)', 'Your settings', pct(cur(k)) + ' of roots') + row('var(--ref)', 'Japan 2011 fit', pct(ref(k)) + ' of roots')); });
+      ov.addEventListener('pointerleave', () => { cross.setAttribute('visibility', 'hidden'); f.hideTip(); });
+    }
+    // ---- chance that a reply is answered, by how popular the root is
+    {
+      const f = frame('ch-answer', 250, 'Chance that a reply is answered, by the number of direct replies to its root');
+      const m = { l: 44, r: 14, t: 12, b: 40 }, x0 = m.l, x1 = f.w - m.r, y0 = f.h - m.b, y1 = m.t, X = logS(1, 1e4, x0, x1), Y = lin(0, 1, y0, y1);
+      for (const v of [0, 0.25, 0.5, 0.75, 1]) { el('line', { x1: x0, x2: x1, y1: Y(v), y2: Y(v), stroke: 'var(--grid)' }, f.svg); el('text', { x: x0 - 8, y: Y(v) + 4, 'text-anchor': 'end', class: 'tick' }, f.svg, Math.round(100 * v) + '%'); }
+      for (const v of [1, 10, 100, 1000, 10000]) { el('line', { x1: X(v), x2: X(v), y1: y0, y2: y0 + 5, stroke: 'var(--line-2)' }, f.svg); el('text', { x: X(v), y: y0 + 18, 'text-anchor': 'middle', class: 'tick' }, f.svg, int(v)); }
+      el('line', { x1: x0, x2: x1, y1: y0, y2: y0, stroke: 'var(--line-2)' }, f.svg);
+      el('text', { x: (x0 + x1) / 2, y: f.h - 6, 'text-anchor': 'middle' }, f.svg, 'Direct replies to the root (log scale)');
+      const ks = []; for (let i = 0; i <= 80; i++) ks.push(Math.pow(10, i / 20));
+      for (const [direct, col] of [[true, 'var(--ink-2)'], [false, 'var(--quiet)']]) {
+        const up = ks.map((k) => [X(k), Y(answerParts(P, k, 1, direct).any)]), dn = ks.map((k) => [X(k), Y(answerParts(P, k, -1, direct).any)]).reverse();
+        el('path', { d: path(up.concat(dn)) + 'Z', fill: col, 'fill-opacity': 0.13, stroke: 'none' }, f.svg);
+        el('path', { d: path(ks.map((k) => [X(k), Y(answerParts(P, k, 0, direct).any)])), fill: 'none', stroke: col, 'stroke-width': 2.5 }, f.svg);
+      }
+      legend('leg-answer', [['', 'var(--ink-2)', 'A reply to the root'], ['', 'var(--quiet)', 'A reply to another reply'], ['box', 'var(--ink-3)', 'Two-thirds of conversations fall in the band', 'opacity:.3']]);
+      const a1 = answerParts(P, 1, 0, true).any, a100 = answerParts(P, 100, 0, true).any, l1 = answerParts(P, 1, 0, false).any, l100 = answerParts(P, 100, 0, false).any;
+      document.getElementById('sub-answer').textContent = 'In a typical conversation a direct reply is answered ' + pct(a1) + ' of the time under a root with one reply and ' + pct(a100) + ' under a root with 100. For later replies it is ' + pct(l1) + ' and ' + pct(l100) + '.';
+      const cross = el('line', { y1: y1, y2: y0, stroke: 'var(--ink-3)', visibility: 'hidden' }, f.svg), ov = el('rect', { x: x0, y: y1, width: x1 - x0, height: y0 - y1, fill: 'transparent' }, f.svg);
+      ov.addEventListener('pointermove', (ev) => { const b = f.svg.getBoundingClientRect(), px = (ev.clientX - b.left) * f.w / b.width, k = Math.max(1, Math.round(X.inv(px)));
+        cross.setAttribute('x1', X(k)); cross.setAttribute('x2', X(k)); cross.setAttribute('visibility', 'visible');
+        const r = (direct) => pct(answerParts(P, k, 0, direct).any) + ' (' + pct(answerParts(P, k, -1, direct).any) + ' to ' + pct(answerParts(P, k, 1, direct).any) + ')';
+        f.showTip(X(k) * b.width / f.w, ev.clientY - b.top, '<b>Root with ' + int(k) + ' direct ' + (k === 1 ? 'reply' : 'replies') + '</b>' + row('var(--ink-2)', 'Reply to the root', r(true)) + row('var(--quiet)', 'Reply to a reply', r(false))); });
+      ov.addEventListener('pointerleave', () => { cross.setAttribute('visibility', 'hidden'); f.hideTip(); });
+    }
+    // ---- eight conversations
+    {
+      const host = document.getElementById('ch-trees'), cols = host.clientWidth >= 640 ? 4 : 2, Ks = [3, 12, 40, 150], traits = [[0, 'A typical conversation'], [1.5, 'A persistent one (about 1 in 15)']];
+      const cw = Math.floor(host.clientWidth / cols), ch = Math.min(cw, 210), rowsN = cols === 4 ? 2 : 4, headH = 26, capH = 42;
+      const f = frame('ch-trees', rowsN * (headH + ch + capH), 'Eight simulated conversations drawn as trees, for roots with 3, 12, 40 and 150 direct replies');
+      traits.forEach(([theta, tname], ti) => Ks.forEach((K, ki) => {
+        const idx = ti * 4 + ki, colI = cols === 4 ? ki : idx % 2, rowI = cols === 4 ? ti : Math.floor(idx / 2);
+        const ox = colI * cw, oy = rowI * (headH + ch + capH), cx = ox + cw / 2, cy = oy + headH + ch / 2, Rm = Math.min(cw, ch) / 2 - 8;
+        const sp = specimen(P, K, theta, 1000 + idx, 420), N = sp.nodes;
+        // leaves under each node, then angular spans
+        const leaves = new Array(N.length).fill(0); for (let i = N.length - 1; i >= 0; i--) { if (!N[i].kids.length) leaves[i] = 1; if (N[i].parent >= 0) leaves[N[i].parent] += leaves[i]; }
+        let maxD = 3; for (const nd of N) if (nd.depth > maxD) maxD = nd.depth;
+        const a0 = new Array(N.length).fill(0), a1 = new Array(N.length).fill(0); a1[0] = 2 * Math.PI;
+        for (let i = 0; i < N.length; i++) { let a = a0[i]; for (const k of N[i].kids) { const span = (a1[i] - a0[i]) * leaves[k] / Math.max(1, leaves[i]); a0[k] = a; a1[k] = a + span; a += span; } }
+        const pos = N.map((nd, i) => { const ang = (a0[i] + a1[i]) / 2 - Math.PI / 2, r = i === 0 ? 0 : Rm * Math.sqrt(nd.depth / maxD); return [cx + r * Math.cos(ang), cy + r * Math.sin(ang)]; });
+        let dd = ''; for (let i = 1; i < N.length; i++) dd += 'M' + pos[N[i].parent][0].toFixed(1) + ' ' + pos[N[i].parent][1].toFixed(1) + 'L' + pos[i][0].toFixed(1) + ' ' + pos[i][1].toFixed(1);
+        el('path', { d: dd, fill: 'none', stroke: 'var(--line-2)', 'stroke-width': 0.8 }, f.svg);
+        const rad = N.length > 200 ? 1.5 : N.length > 60 ? 2 : 2.6; let later = 0;
+        for (let i = 1; i < N.length; i++) { const lat = N[i].depth > 1; if (lat) later++; el('circle', { cx: pos[i][0].toFixed(1), cy: pos[i][1].toFixed(1), r: rad, fill: lat ? 'var(--quiet)' : 'var(--ink-3)' }, f.svg); }
+        el('circle', { cx, cy, r: 4, fill: 'var(--ink)' }, f.svg);
+        if (ki === 0 || (cols === 2 && ki % 2 === 0)) el('text', { x: ox + 4, y: oy + 15, class: 'strong' }, f.svg, tname);
+        el('text', { x: cx, y: oy + headH + ch + 14, 'text-anchor': 'middle' }, f.svg, K + ' direct replies');
+        el('text', { x: cx, y: oy + headH + ch + 28, 'text-anchor': 'middle', class: 'tick' }, f.svg, (sp.cut ? 'over ' : '') + int(N.length) + ' posts, ' + pct(later / Math.max(1, N.length - 1)) + (cols === 4 ? ' below a reply' : ' deeper'));
+      }));
+    }
+  }
+
   /* ====================================================================== render */
   function facts(id, rows) { document.getElementById(id).innerHTML = rows.map(([k, v]) => '<dt>' + k + '</dt><dd>' + v + '</dd>').join(''); }
   function render() {
@@ -1438,7 +1580,7 @@ const SIM_SOURCE = "/* sim.js \u2014 the stochastic reply-tree model (GRT, 18 pa
     st.innerHTML = tableInfo.kind === 'ref' ? '<b>' + (tableInfo.name === 'japan2011' ? 'Japan 2011 reference' : 'Precomputed scenario') + '</b> · ' + (tableInfo.name === 'japan2011' ? '200M' : big(SCENARIO_TABLES[tableInfo.name].trees)) + ' simulated conversations'
       : '<b>' + (pending ? 'Simulating' : 'Simulated') + '</b> · ' + big(tableInfo.trees) + ' conversations' + (pending ? ' · pass ' + tableInfo.round + ' of ' + tableInfo.rounds : '') + (tableInfo.excess > 1e-7 ? ' · some conversations exceed 3M posts' : '');
     document.getElementById('foot-build').textContent = CONFIG.version + '. Quota and monthly reply volume are placeholders until the contract and the 2024 data say otherwise.';
-    drawLogic(d); drawFrontier(d); drawBars(d); drawReach(d); drawCover(d); drawShape(d); drawPop(d);
+    drawLogic(d); drawFrontier(d); drawBars(d); drawReach(d); drawCover(d); drawShape(d); drawPop(d); drawModel();
     scheduleRange();
   }
 

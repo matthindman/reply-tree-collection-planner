@@ -207,7 +207,7 @@
     return { w, ws };
   }
 
-  const api = { EDGES, NB, binOf, simulate, normalise, logQ, zeta, rootTable, invRoot };
+  const api = { EDGES, NB, binOf, simulate, normalise, logQ, zeta, rootTable, invRoot, DX, X_MAX };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.GRT = api;
 

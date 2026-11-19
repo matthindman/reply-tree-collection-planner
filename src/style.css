@@ -96,7 +96,7 @@ details.more[open] > summary { margin-bottom: 10px; }
 /* ---------- cards and charts */
 .card { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 18px 20px 16px; min-width: 0; }
 .card > h3 { font-size: 16px; font-weight: 600; margin: 0 0 2px; letter-spacing: -0.005em; }
-.card > p.sub { margin: 0 0 12px; color: var(--ink-2); font-size: 13px; max-width: 78ch; }
+.card p.sub { margin: 0 0 12px; color: var(--ink-2); font-size: 13px; max-width: 78ch; }
 .pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; }
 @media (max-width: 1180px) { .pair { grid-template-columns: minmax(0, 1fr); } }
 .chart { position: relative; width: 100%; }
@@ -143,3 +143,12 @@ table.range .wait { color: var(--ink-3); }
 table.range .chip { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 6px; }
 .qbar { height: 6px; background: var(--grid); border-radius: 3px; margin: 2px 0 5px; overflow: hidden; max-width: 150px; }
 .qbar i { display: block; height: 100%; border-radius: 3px; }
+
+/* ---------- model panel */
+.model-text { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px 28px; margin: 4px 0 18px; }
+.model-text h4, h4.fig { font-size: 13.5px; font-weight: 600; margin: 0 0 3px; }
+.model-text p { margin: 0; font-size: 13px; color: var(--ink-2); }
+.model-text em { font-style: normal; color: var(--ink); font-weight: 500; }
+.pair.inner { gap: 28px; }
+.pair.inner > div { min-width: 0; }
+@media (max-width: 860px) { .model-text { grid-template-columns: minmax(0, 1fr); } }

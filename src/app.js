@@ -6,7 +6,7 @@
 
   /* ====================================================================== CONFIG */
   const CONFIG = {
-    version: 'Draft 7 · 19 November 2026',
+    version: 'Draft 8 · 19 November 2026',
     // Fitted parameters of the reply-tree model (general_model/fits). Japan 2011 is the default.
     models: {
       // Best guess for Japanese X today: a full parameter set calibrated to the prior assessments (data/calibrate_today.js).
@@ -647,6 +647,113 @@
     legend('leg-pop', []);
   }
 
+  /* ====================================================================== the model, pictured */
+  function seeded(seed) {                      // small seeded generator for the specimen conversations
+    let a = (seed >>> 0) || 1, spare = 0, has = false;
+    const u = () => { a = (a + 0x6D2B79F5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return (((t ^ (t >>> 14)) >>> 0) + 0.5) / 4294967296; };
+    const n = () => { if (has) { has = false; return spare; } let x, y, r; do { x = 2 * u() - 1; y = 2 * u() - 1; r = x * x + y * y; } while (r >= 1 || r === 0); const f = Math.sqrt(-2 * Math.log(r) / r); spare = y * f; has = true; return x * f; };
+    return { u, n };
+  }
+  const answerParts = (P, K, theta, direct) => {
+    const x = Math.log(K), al = 1 + (P.alpha0 - 1) * Math.exp(-(direct ? P.b1 : P.b2) * x);
+    const q = direct ? logistic(P.c0 - P.c1 * x + P.s1 * theta) : logistic(P.mu - P.gam * x + P.sig * theta);
+    const phi = logistic((direct ? P.g0 : P.f0) + P.f1 * x) / (1 + GRT.zeta(al));
+    return { q, phi, al, any: q + (1 - q) * phi };
+  };
+  /* One conversation with its structure kept. Each direct reply has its own random stream, so the same
+     draw changes smoothly as parameters move. Stops at maxNodes posts. */
+  function specimen(P, K, theta, seed, maxNodes) {
+    const nodes = [{ parent: -1, depth: 0, kids: [] }]; let cut = false;
+    const d1 = answerParts(P, K, theta, true), d2 = answerParts(P, K, theta, false), base = P.mu - P.gam * Math.log(K) + P.sig * theta;
+    const add = (parent) => { nodes.push({ parent, depth: nodes[parent].depth + 1, kids: [] }); nodes[parent].kids.push(nodes.length - 1); return nodes.length - 1; };
+    for (let i = 0; i < K && !cut; i++) {
+      const g = seeded(seed * 7919 + i * 104729 + 13), pending = [[0, true]];
+      while (pending.length && !cut) {
+        const [par, isRoot] = pending.shift();
+        const z = base + P.tau * g.n(), logU = z > 35 ? -Math.exp(-z) : -Math.log1p(Math.exp(-z));
+        const cont = g.u() < (isRoot ? d1.q : Math.exp(logU));
+        let len = 1; if (cont) len = 2 + Math.floor(Math.log(g.u()) / logU);
+        let cur = par; for (let j = 0; j < len; j++) { if (nodes.length >= maxNodes) { cut = true; break; } cur = add(cur); }
+        const end1 = isRoot && !cont;
+        if (!cut && g.u() < (end1 ? d1.phi : d2.phi)) { const D = 1 + Math.floor(Math.exp(Math.min(6, -Math.log(g.u()) / (end1 ? d1.al : d2.al)))); for (let j = 0; j < D; j++) pending.push([cur, false]); }
+      }
+    }
+    return { nodes, cut };
+  }
+  function drawModel() {
+    const P = modelParams(), P0 = CONFIG.models.japan2011.params;
+    // ---- direct replies to a root: share of roots with at least k
+    {
+      const f = frame('ch-rootlaw', 250, 'Share of roots with at least a given number of direct replies');
+      const m = { l: 54, r: 14, t: 12, b: 40 }, x0 = m.l, x1 = f.w - m.r, y0 = f.h - m.b, y1 = m.t, X = logS(1, 1e5, x0, x1), Y = logS(1e-7, 1, y0, y1);
+      for (const [v, lab] of [[1e-6, '0.0001%'], [1e-4, '0.01%'], [1e-2, '1%'], [1, '100%']]) { el('line', { x1: x0, x2: x1, y1: Y(v), y2: Y(v), stroke: 'var(--grid)' }, f.svg); el('text', { x: x0 - 8, y: Y(v) + 4, 'text-anchor': 'end', class: 'tick' }, f.svg, lab); }
+      for (const v of [1, 10, 100, 1000, 10000, 100000]) { el('line', { x1: X(v), x2: X(v), y1: y0, y2: y0 + 5, stroke: 'var(--line-2)' }, f.svg); el('text', { x: X(v), y: y0 + 18, 'text-anchor': 'middle', class: 'tick' }, f.svg, int(v)); }
+      el('line', { x1: x0, x2: x1, y1: y0, y2: y0, stroke: 'var(--line-2)' }, f.svg);
+      el('text', { x: (x0 + x1) / 2, y: f.h - 6, 'text-anchor': 'middle' }, f.svg, 'Roots with at least this many direct replies (log scales)');
+      const sf = (p) => { const ls = GRT.rootTable(p); return (k) => Math.exp(ls[Math.min(ls.length - 1, Math.round(Math.log(k) / GRT.DX))]); };
+      const cur = sf(P), ref = sf(P0), ks = []; for (let i = 0; i <= 100; i++) ks.push(Math.pow(10, i / 20));
+      const line = (fn, col, wd, dash) => { const pts = ks.map((k) => [k, fn(k)]).filter((p) => p[1] >= 1e-7).map((p) => [X(p[0]), Y(p[1])]); el('path', { d: path(pts), fill: 'none', stroke: col, 'stroke-width': wd, 'stroke-dasharray': dash }, f.svg); return pts; };
+      const rp = line(ref, 'var(--ref)', 1.5, '5 4'), cp = line(cur, 'var(--ink)', 2.5, null);
+      if (rp.length && ref(20) >= 1e-7) el('text', { x: X(20) - 8, y: Y(ref(20)) + 14, 'text-anchor': 'end' }, f.svg, 'Japan 2011 fit');
+      for (const k of [10, 100, 1000]) { const v = cur(k); if (v >= 1e-7) { el('circle', { cx: X(k), cy: Y(v), r: 3.5, fill: 'var(--surface)', stroke: 'var(--ink)', 'stroke-width': 2 }, f.svg); } }
+      document.getElementById('sub-rootlaw').textContent = pct(1 - cur(2)) + ' of roots get exactly one reply. One root in ' + int(1 / cur(100)) + ' gets 100 or more, and one in ' + int(1 / Math.max(1e-12, cur(1000))) + ' gets 1,000 or more.';
+      const cross = el('line', { y1: y1, y2: y0, stroke: 'var(--ink-3)', visibility: 'hidden' }, f.svg), ov = el('rect', { x: x0, y: y1, width: x1 - x0, height: y0 - y1, fill: 'transparent' }, f.svg);
+      ov.addEventListener('pointermove', (ev) => { const b = f.svg.getBoundingClientRect(), px = (ev.clientX - b.left) * f.w / b.width, k = Math.max(1, Math.round(X.inv(px)));
+        cross.setAttribute('x1', X(k)); cross.setAttribute('x2', X(k)); cross.setAttribute('visibility', 'visible');
+        f.showTip(X(k) * b.width / f.w, ev.clientY - b.top, '<b>' + int(k) + ' or more direct replies</b>' + row('var(--ink)', 'Your settings', pct(cur(k)) + ' of roots') + row('var(--ref)', 'Japan 2011 fit', pct(ref(k)) + ' of roots')); });
+      ov.addEventListener('pointerleave', () => { cross.setAttribute('visibility', 'hidden'); f.hideTip(); });
+    }
+    // ---- chance that a reply is answered, by how popular the root is
+    {
+      const f = frame('ch-answer', 250, 'Chance that a reply is answered, by the number of direct replies to its root');
+      const m = { l: 44, r: 14, t: 12, b: 40 }, x0 = m.l, x1 = f.w - m.r, y0 = f.h - m.b, y1 = m.t, X = logS(1, 1e4, x0, x1), Y = lin(0, 1, y0, y1);
+      for (const v of [0, 0.25, 0.5, 0.75, 1]) { el('line', { x1: x0, x2: x1, y1: Y(v), y2: Y(v), stroke: 'var(--grid)' }, f.svg); el('text', { x: x0 - 8, y: Y(v) + 4, 'text-anchor': 'end', class: 'tick' }, f.svg, Math.round(100 * v) + '%'); }
+      for (const v of [1, 10, 100, 1000, 10000]) { el('line', { x1: X(v), x2: X(v), y1: y0, y2: y0 + 5, stroke: 'var(--line-2)' }, f.svg); el('text', { x: X(v), y: y0 + 18, 'text-anchor': 'middle', class: 'tick' }, f.svg, int(v)); }
+      el('line', { x1: x0, x2: x1, y1: y0, y2: y0, stroke: 'var(--line-2)' }, f.svg);
+      el('text', { x: (x0 + x1) / 2, y: f.h - 6, 'text-anchor': 'middle' }, f.svg, 'Direct replies to the root (log scale)');
+      const ks = []; for (let i = 0; i <= 80; i++) ks.push(Math.pow(10, i / 20));
+      for (const [direct, col] of [[true, 'var(--ink-2)'], [false, 'var(--quiet)']]) {
+        const up = ks.map((k) => [X(k), Y(answerParts(P, k, 1, direct).any)]), dn = ks.map((k) => [X(k), Y(answerParts(P, k, -1, direct).any)]).reverse();
+        el('path', { d: path(up.concat(dn)) + 'Z', fill: col, 'fill-opacity': 0.13, stroke: 'none' }, f.svg);
+        el('path', { d: path(ks.map((k) => [X(k), Y(answerParts(P, k, 0, direct).any)])), fill: 'none', stroke: col, 'stroke-width': 2.5 }, f.svg);
+      }
+      legend('leg-answer', [['', 'var(--ink-2)', 'A reply to the root'], ['', 'var(--quiet)', 'A reply to another reply'], ['box', 'var(--ink-3)', 'Two-thirds of conversations fall in the band', 'opacity:.3']]);
+      const a1 = answerParts(P, 1, 0, true).any, a100 = answerParts(P, 100, 0, true).any, l1 = answerParts(P, 1, 0, false).any, l100 = answerParts(P, 100, 0, false).any;
+      document.getElementById('sub-answer').textContent = 'In a typical conversation a direct reply is answered ' + pct(a1) + ' of the time under a root with one reply and ' + pct(a100) + ' under a root with 100. For later replies it is ' + pct(l1) + ' and ' + pct(l100) + '.';
+      const cross = el('line', { y1: y1, y2: y0, stroke: 'var(--ink-3)', visibility: 'hidden' }, f.svg), ov = el('rect', { x: x0, y: y1, width: x1 - x0, height: y0 - y1, fill: 'transparent' }, f.svg);
+      ov.addEventListener('pointermove', (ev) => { const b = f.svg.getBoundingClientRect(), px = (ev.clientX - b.left) * f.w / b.width, k = Math.max(1, Math.round(X.inv(px)));
+        cross.setAttribute('x1', X(k)); cross.setAttribute('x2', X(k)); cross.setAttribute('visibility', 'visible');
+        const r = (direct) => pct(answerParts(P, k, 0, direct).any) + ' (' + pct(answerParts(P, k, -1, direct).any) + ' to ' + pct(answerParts(P, k, 1, direct).any) + ')';
+        f.showTip(X(k) * b.width / f.w, ev.clientY - b.top, '<b>Root with ' + int(k) + ' direct ' + (k === 1 ? 'reply' : 'replies') + '</b>' + row('var(--ink-2)', 'Reply to the root', r(true)) + row('var(--quiet)', 'Reply to a reply', r(false))); });
+      ov.addEventListener('pointerleave', () => { cross.setAttribute('visibility', 'hidden'); f.hideTip(); });
+    }
+    // ---- eight conversations
+    {
+      const host = document.getElementById('ch-trees'), cols = host.clientWidth >= 640 ? 4 : 2, Ks = [3, 12, 40, 150], traits = [[0, 'A typical conversation'], [1.5, 'A persistent one (about 1 in 15)']];
+      const cw = Math.floor(host.clientWidth / cols), ch = Math.min(cw, 210), rowsN = cols === 4 ? 2 : 4, headH = 26, capH = 42;
+      const f = frame('ch-trees', rowsN * (headH + ch + capH), 'Eight simulated conversations drawn as trees, for roots with 3, 12, 40 and 150 direct replies');
+      traits.forEach(([theta, tname], ti) => Ks.forEach((K, ki) => {
+        const idx = ti * 4 + ki, colI = cols === 4 ? ki : idx % 2, rowI = cols === 4 ? ti : Math.floor(idx / 2);
+        const ox = colI * cw, oy = rowI * (headH + ch + capH), cx = ox + cw / 2, cy = oy + headH + ch / 2, Rm = Math.min(cw, ch) / 2 - 8;
+        const sp = specimen(P, K, theta, 1000 + idx, 420), N = sp.nodes;
+        // leaves under each node, then angular spans
+        const leaves = new Array(N.length).fill(0); for (let i = N.length - 1; i >= 0; i--) { if (!N[i].kids.length) leaves[i] = 1; if (N[i].parent >= 0) leaves[N[i].parent] += leaves[i]; }
+        let maxD = 3; for (const nd of N) if (nd.depth > maxD) maxD = nd.depth;
+        const a0 = new Array(N.length).fill(0), a1 = new Array(N.length).fill(0); a1[0] = 2 * Math.PI;
+        for (let i = 0; i < N.length; i++) { let a = a0[i]; for (const k of N[i].kids) { const span = (a1[i] - a0[i]) * leaves[k] / Math.max(1, leaves[i]); a0[k] = a; a1[k] = a + span; a += span; } }
+        const pos = N.map((nd, i) => { const ang = (a0[i] + a1[i]) / 2 - Math.PI / 2, r = i === 0 ? 0 : Rm * Math.sqrt(nd.depth / maxD); return [cx + r * Math.cos(ang), cy + r * Math.sin(ang)]; });
+        let dd = ''; for (let i = 1; i < N.length; i++) dd += 'M' + pos[N[i].parent][0].toFixed(1) + ' ' + pos[N[i].parent][1].toFixed(1) + 'L' + pos[i][0].toFixed(1) + ' ' + pos[i][1].toFixed(1);
+        el('path', { d: dd, fill: 'none', stroke: 'var(--line-2)', 'stroke-width': 0.8 }, f.svg);
+        const rad = N.length > 200 ? 1.5 : N.length > 60 ? 2 : 2.6; let later = 0;
+        for (let i = 1; i < N.length; i++) { const lat = N[i].depth > 1; if (lat) later++; el('circle', { cx: pos[i][0].toFixed(1), cy: pos[i][1].toFixed(1), r: rad, fill: lat ? 'var(--quiet)' : 'var(--ink-3)' }, f.svg); }
+        el('circle', { cx, cy, r: 4, fill: 'var(--ink)' }, f.svg);
+        if (ki === 0 || (cols === 2 && ki % 2 === 0)) el('text', { x: ox + 4, y: oy + 15, class: 'strong' }, f.svg, tname);
+        el('text', { x: cx, y: oy + headH + ch + 14, 'text-anchor': 'middle' }, f.svg, K + ' direct replies');
+        el('text', { x: cx, y: oy + headH + ch + 28, 'text-anchor': 'middle', class: 'tick' }, f.svg, (sp.cut ? 'over ' : '') + int(N.length) + ' posts, ' + pct(later / Math.max(1, N.length - 1)) + (cols === 4 ? ' below a reply' : ' deeper'));
+      }));
+    }
+  }
+
   /* ====================================================================== render */
   function facts(id, rows) { document.getElementById(id).innerHTML = rows.map(([k, v]) => '<dt>' + k + '</dt><dd>' + v + '</dd>').join(''); }
   function render() {
@@ -691,7 +798,7 @@
     st.innerHTML = tableInfo.kind === 'ref' ? '<b>' + (tableInfo.name === 'japan2011' ? 'Japan 2011 reference' : 'Precomputed scenario') + '</b> · ' + (tableInfo.name === 'japan2011' ? '200M' : big(SCENARIO_TABLES[tableInfo.name].trees)) + ' simulated conversations'
       : '<b>' + (pending ? 'Simulating' : 'Simulated') + '</b> · ' + big(tableInfo.trees) + ' conversations' + (pending ? ' · pass ' + tableInfo.round + ' of ' + tableInfo.rounds : '') + (tableInfo.excess > 1e-7 ? ' · some conversations exceed 3M posts' : '');
     document.getElementById('foot-build').textContent = CONFIG.version + '. Quota and monthly reply volume are placeholders until the contract and the 2024 data say otherwise.';
-    drawLogic(d); drawFrontier(d); drawBars(d); drawReach(d); drawCover(d); drawShape(d); drawPop(d);
+    drawLogic(d); drawFrontier(d); drawBars(d); drawReach(d); drawCover(d); drawShape(d); drawPop(d); drawModel();
     scheduleRange();
   }
 
