@@ -4,6 +4,14 @@ An interactive page for thinking through how to collect the largest reply trees 
 and the plan, its cost and its biases update at once. The page opens on "Best guess for
 Japanese X today" (about 12% of replies in conversations of 100+ posts); the other scenarios are one click away.
 
+## Two views
+
+- **Cascades** (the page opens here): a root with its replies, quotes and retweets. Arithmetic on monthly
+  totals supplied by the collaborators (`src/cascade_model.js`, view in `src/cascades.js`; defaults in
+  `DEFAULTS` at the top of `src/cascades.js`). Checked by `node test/test_cascade.js`.
+- **Reply trees**: the reply part of a cascade, simulated from the stochastic reply-tree model (everything
+  described below).
+
 ## Files
 
 - `index.html` — the whole tool in one file. Open it in a browser, or serve it from GitHub Pages.
@@ -44,7 +52,7 @@ To change one, edit `data/scenarios.json`, then run `node data/make_scenarios.js
 
 1. Edit a file in `src/` (most changes are in `CONFIG` or `GROUPS` in `src/app.js`).
 2. Rebuild: `python3 build.py`
-3. Check: `node test/test_sim.js && node test/test_cost.js` (both exit non-zero if a check fails)
+3. Check: `node test/test_sim.js && node test/test_cost.js && node test/test_cascade.js` (each exits non-zero if a check fails)
 4. Publish: push this folder to the public repository that serves the page (GitHub Pages serves `index.html`).
 
 Examples of one-line changes: a new default quota (`CONFIG.defaults.quota`), a new fitted model

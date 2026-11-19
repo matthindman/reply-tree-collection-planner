@@ -1,16 +1,73 @@
 <div class="page">
   <header class="top">
     <div>
-      <h1>Reply Tree Collection Planner</h1>
-      <p>Set your assumptions about Japanese-language X, the API contract and what you want to collect. The results update as you move a control: the plan, what it costs, and which conversations it misses.</p>
+      <h1>Cascade and Reply Tree Collection Planner</h1>
+      <p id="intro">Set what you know about the cap, the stream and how large cascades are. The results update as you move a control: what fits under the cap, what it costs, and what is left out.</p>
     </div>
     <div class="top-actions">
-      <span class="status" id="status"></span>
-      <button class="btn" id="btn-copy" type="button">Copy settings</button>
-      <button class="btn" id="btn-reset" type="button">Reset</button>
+      <div class="seg views" role="group" aria-label="View"><button type="button" id="tab-cascades" aria-pressed="true">Cascades</button><button type="button" id="tab-trees" aria-pressed="false">Reply trees</button></div>
+      <span class="status" id="status" hidden></span>
+      <button class="btn" id="btn-copy" type="button" hidden>Copy settings</button>
+      <button class="btn" id="btn-reset" type="button" hidden>Reset</button>
     </div>
   </header>
 
+  <div id="view-cascades">
+  <div class="cols">
+    <aside class="rail" id="c-rail" aria-label="Cascade assumptions"></aside>
+    <main class="results">
+      <section class="verdict" aria-live="polite">
+        <span class="pill ok" id="c-pill">Fits the cap</span>
+        <h2 id="c-headline">&nbsp;</h2>
+        <p class="recipe" id="c-recipe"></p>
+        <div class="kpis" id="c-kpis"></div>
+      </section>
+
+      <section class="card">
+        <h3>How this plan collects</h3>
+        <p class="sub" id="c-sub-flow"></p>
+        <div class="chart" id="c-flow"></div>
+      </section>
+
+      <section class="card">
+        <h3>What a cascade is made of, and what the plan keeps</h3>
+        <p class="sub" id="c-sub-mix"></p>
+        <div class="legend" id="c-leg-mix"></div>
+        <div class="chart" id="c-mix"></div>
+      </section>
+
+      <div class="pair">
+        <section class="card">
+          <h3>What fits under the cap</h3>
+          <p class="sub" id="c-sub-fit"></p>
+          <div class="legend" id="c-leg-fit"></div>
+          <div class="chart" id="c-fit"></div>
+        </section>
+        <section class="card">
+          <h3>What the stream finds</h3>
+          <p class="sub" id="c-sub-find"></p>
+          <div class="legend" id="c-leg-find"></div>
+          <div class="chart" id="c-find"></div>
+        </section>
+      </div>
+
+      <section class="foot">
+        <h3>How to read this</h3>
+        <ul>
+          <li>A cascade is an original post (root) with everything that hangs from it inside the window: replies, quotes and retweets. Retweets and quotes that are not replies carry no conversation ID, so a cascade is assembled from the post each one refers to.</li>
+          <li>The monthly figures on the left are inputs, not measurements made here. Sizes above 1,000 posts follow a Pareto tail whose exponent is set by the mean size you enter. The mix of retweets, replies and quotes is taken to be the same at every size.</li>
+          <li>Costs are in units. One unit is the charge for one post returned. A count lookup of a root is one unit, charged once a day.</li>
+          <li>A cascade's size is read from its root's public counts. Those cover retweets, replies and quotes of the root, not retweets of its replies or of its quotes, so sizes are slightly understated.</li>
+          <li>Retweets that are not downloaded are still observed: the stream carries a random share of them, and the daily counts give the totals. What is lost is the full list of who retweeted and when.</li>
+          <li>Nothing here has been tested on a paid account. The search operators for retweets, quotes and replies of a post are documented by X; their charges and completeness are assumed.</li>
+          <li id="c-foot-build"></li>
+        </ul>
+      </section>
+    </main>
+  </div>
+  </div>
+
+  <div id="view-trees" hidden>
   <div class="cols">
     <aside class="rail" id="rail" aria-label="Assumptions"></aside>
 
@@ -123,5 +180,6 @@
         </ul>
       </section>
     </main>
+  </div>
   </div>
 </div>

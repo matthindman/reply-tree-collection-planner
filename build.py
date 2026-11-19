@@ -19,7 +19,7 @@ scripts = "\n".join(
     "<script>\n" + s + "\n</script>" for s in [
         src("ref_tables.js"), src("scenario_tables.js"), sim, src("cost.js"),
         "const SIM_SOURCE = " + json.dumps(sim).replace("</", "<\\/") + ";",
-        src("app.js"),
+        src("app.js"), src("cascade_model.js"), src("cascades.js"),
     ])
 fragment = head + src("page.html") + scripts + "\n"
 (here / "planner.html").write_text(fragment)

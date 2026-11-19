@@ -6,7 +6,7 @@
 
   /* ====================================================================== CONFIG */
   const CONFIG = {
-    version: 'Draft 11 · 19 November 2026',
+    version: 'Draft 12 · 19 November 2026',
     // Fitted parameters of the reply-tree model (general_model/fits). Japan 2011 is the default.
     models: {
       // Best guess for Japanese X today: a full parameter set calibrated to the prior assessments (data/calibrate_today.js).
@@ -909,5 +909,6 @@
   });
   let rz = 0; window.addEventListener('resize', () => { clearTimeout(rz); rz = setTimeout(schedule, 120); });
   buildControls(); refreshControls(); refreshPopulation(); render();
-  window.PLANNER = { get state() { return state; }, get last() { return last; }, CONFIG };
+  window.PLANNER = { get state() { return state; }, get last() { return last; }, CONFIG, rerender: schedule,
+                     ui: { el, frame, lin, logS, logTicks, path, legend, row, big, pct, int, niceStep } };
 })();
