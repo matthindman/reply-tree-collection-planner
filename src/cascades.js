@@ -15,7 +15,8 @@
     q1000: 4.5e7,        // quotes of them
     rt: 0.87,            // retweets as a share of those posts (given as 85 to 89%)
     nAll: 1.57e6,        // cascades counted a month; its size floor is not known, so it is only reported
-    cut: 1000, quotes: true, under: 0, rtMode: 'none', rtN: 1000, rtShare: 1, hits: 1,
+    cut: 1000, quotes: true, under: 0, rtMode: 'none', rtN: 100, rtRate: 0.03, rtShare: 1, hits: 1,
+    curves: true, curveCut: 1000, curveCost: 1,   // minute-by-minute counts of retweets, replies and quotes: one request each
   };
   const CUTS = [200, 300, 500, 750, 1000, 1500, 2000, 3000, 5000, 7500, 10000, 15000, 20000, 50000, 100000];
   const TYPE = { replies: 'var(--root)', quotes: 'var(--both)', retweets: 'var(--sample)' };
@@ -41,9 +42,16 @@
       { key: 'quotes', kind: 'check', label: 'Download quotes' },
       { key: 'under', kind: 'range', label: 'Posts under each quote', min: 0, max: 2, step: 0.05, fmt: (v) => v.toFixed(2), disabled: () => !st.quotes,
         hint: 'Replies to a quote, and quotes of it, per quote. Unknown; 0 leaves them out.' },
-      { key: 'rtMode', kind: 'seg', label: 'Download retweets', options: [['none', 'None'], ['first', 'First N'], ['all', 'All']],
-        hint: 'None keeps the stream sample and the daily counts only.' },
-      { key: 'rtN', kind: 'pick', label: 'Retweets read from each cascade', choices: [100, 500, 1000, 5000, 10000], fmt: (v) => 'first ' + int(v), disabled: () => st.rtMode !== 'first' },
+      { key: 'curves', kind: 'check', label: 'Buy count curves' },
+      { key: 'curveCut', kind: 'pick', label: 'Count curves for cascades of at least', choices: CUTS, fmt: (v) => int(v) + ' posts', disabled: () => !st.curves,
+        hint: 'Three count requests per cascade give minute-by-minute totals of its retweets, replies and quotes, without downloading them.' },
+      { key: 'curveCost', kind: 'range', label: 'Price of one count request', min: 0, max: 2, step: 1, fmt: (v) => v + (v === 1 ? ' unit' : ' units'), disabled: () => !st.curves,
+        hint: 'One unit for the last seven days on the public price list. Set to 0 if counts do not draw on the cap.' },
+      { key: 'rtMode', kind: 'seg', label: 'Download retweets', options: [['none', 'None'], ['sample', 'Sample'], ['first', 'First N'], ['all', 'All']],
+        hint: 'Each retweet downloaded shows who retweeted and when. Sample buys a random share through a stream rule, from the moment a cascade is flagged.' },
+      { key: 'rtRate', kind: 'range', label: 'Random share of retweets bought', min: 0.01, max: 0.5, step: 0.01, fmt: (v) => Math.round(100 * v) + '%', disabled: () => st.rtMode !== 'sample' },
+      { key: 'rtN', kind: 'pick', label: 'Retweets read from each cascade', choices: [50, 75, 100, 500, 1000, 5000, 10000], fmt: (v) => 'first ' + int(v), disabled: () => st.rtMode !== 'first',
+        hint: 'The count curve shows which time window holds the first N.' },
       { key: 'rtShare', kind: 'range', label: 'For this share of cascades', min: 0.05, max: 1, step: 0.05, fmt: (v) => Math.round(100 * v) + '%', disabled: () => st.rtMode === 'none',
         hint: 'A random share of cascades gets its retweets downloaded.' },
       { key: 'hits', kind: 'range', label: 'Sampled posts needed to flag a cascade', min: 1, max: 5, step: 1, fmt: (v) => String(v), disabled: () => !(st.stream > 0) },
@@ -93,13 +101,15 @@
   function changed() { refreshers.forEach((f) => f()); if (!raf) raf = requestAnimationFrame(() => { raf = 0; render(); }); }
 
   /* ====================================================================== words */
-  const opts = (over) => Object.assign({ cut: st.cut, quotes: st.quotes, under: st.under, rtMode: st.rtMode, rtN: st.rtN, rtShare: st.rtShare, days: st.days, stream: st.stream, hits: st.hits }, over || {});
+  const opts = (over) => Object.assign({ cut: st.cut, quotes: st.quotes, under: st.under, rtMode: st.rtMode, rtN: st.rtN, rtRate: st.rtRate, rtShare: st.rtShare, days: st.days, stream: st.stream, hits: st.hits,
+    curves: st.curves ? 3 : 0, curveCut: st.curveCut, curveCost: st.curveCost }, over || {});
   const streamName = () => (100 * st.stream) + '% stream';
   function what() {
     const base = st.quotes ? 'Replies and quotes' : 'Replies';
     if (st.rtMode === 'none') return base;
     const share = st.rtShare < 0.995 ? ' for ' + Math.round(100 * st.rtShare) + '% of cascades' : '';
     if (st.rtMode === 'all') return st.quotes && !share ? 'Every post' : base + ', and every retweet' + share;
+    if (st.rtMode === 'sample') return base + ', and a random ' + Math.round(100 * st.rtRate) + '% of retweets' + share;
     return base + ', and the first ' + int(st.rtN) + ' retweets' + share;
   }
   function recipe(r) {
@@ -107,9 +117,10 @@
     parts.push(st.stream > 0 ? 'Flag a cascade when ' + (st.hits === 1 ? 'one of its posts appears' : st.hits + ' of its posts appear') + ' in the ' + streamName() + '.'
       : 'Search each day for roots whose repost count shows a cascade of at least ' + int(st.cut / 2) + ' posts.');
     parts.push('Look up each flagged root’s counts once a day until day ' + st.days + ', and keep those that reach ' + int(st.cut) + ' posts.');
-    parts.push('Download their replies' + (st.quotes ? ' and quotes' : '') + '.');
-    parts.push(st.rtMode === 'none' ? (st.stream > 0 ? 'Take retweets from the stream sample and the daily counts.' : 'Take retweet totals from the daily counts.')
-      : 'Download ' + (st.rtMode === 'all' ? 'every retweet' : 'the first ' + int(st.rtN) + ' retweets of each') + (st.rtShare < 0.995 ? ', for a random ' + Math.round(100 * st.rtShare) + '% of cascades.' : '.'));
+    if (st.curves) parts.push('Request minute-by-minute counts of the retweets, replies and quotes of each cascade of ' + int(st.curveCut) + '+ posts.');
+    parts.push('Download the replies' + (st.quotes ? ' and quotes' : '') + ' of cascades of ' + int(st.cut) + '+ posts.');
+    parts.push(st.rtMode === 'none' ? (st.stream > 0 ? 'Take retweeters from the stream sample' : 'Take no individual retweets') + (st.curves ? '; the count curves give the timing of every retweet.' : ' and totals from the daily lookups.')
+      : (st.rtMode === 'sample' ? 'Buy a random ' + Math.round(100 * st.rtRate) + '% of their retweets through a stream rule' : 'Download ' + (st.rtMode === 'all' ? 'every retweet' : 'the first ' + int(st.rtN) + ' retweets of each')) + (st.rtShare < 0.995 ? ', for a random ' + Math.round(100 * st.rtShare) + '% of cascades.' : '.'));
     return parts.join(' ');
   }
 
@@ -120,10 +131,10 @@
     const boxes = [
       st.stream > 0 ? { title: streamName().replace(/^./, (c) => c.toUpperCase()), color: 'var(--ink-2)', lines: ['flags at the ' + (st.hits === 1 ? 'first' : st.hits + ordSuffix(st.hits)) + ' sampled post', pct(r.found) + ' of ' + int(st.cut) + '+ cascades', 'outside the cap'] }
                     : { title: 'Search by repost count', color: 'var(--ink-2)', lines: ['roots near ' + int(st.cut / 2) + '+ posts', big(r.watched) + ' roots a month', 'costs ' + big(r.finding) + ' units'] },
-      { title: 'Check the root’s counts', lines: ['once a day to day ' + st.days, big(r.watched) + ' cascades watched', 'costs ' + big(r.checks) + ' units'] },
+      { title: st.curves ? 'Check size, count curves' : 'Check the root’s counts', lines: ['daily lookups to day ' + st.days, st.curves ? 'minute curves, ' + big(r.curved) + ' cascades' : big(r.watched) + ' cascades watched', 'costs ' + big(r.checks + r.curves) + ' units'] },
       { title: st.quotes ? 'Download replies, quotes' : 'Download replies', lines: [big(r.replies) + ' replies and roots', st.quotes ? big(r.quotes + r.under) + ' quotes' + (r.under > 0 ? ' and posts under' : '') : 'quotes left out', 'costs ' + big(r.replies + r.quotes + r.under) + ' units'] },
-      st.rtMode === 'none' ? { title: 'Retweets, not downloaded', dashed: true, lines: [st.stream > 0 ? big(r.sampledRt) + ' in the stream sample' : 'no sample without a stream', 'totals from daily counts', 'costs nothing'] }
-                           : { title: 'Download retweets', color: TYPE.retweets, lines: [st.rtMode === 'all' ? 'every retweet' : 'first ' + int(st.rtN) + ' of each', st.rtShare < 0.995 ? 'for ' + Math.round(100 * st.rtShare) + '% of cascades' : 'for every cascade', 'costs ' + big(r.retweets) + ' units'] },
+      st.rtMode === 'none' ? { title: 'Retweets, not downloaded', dashed: true, lines: [st.stream > 0 ? big(r.sampledRt) + ' in the stream sample' : 'no sample without a stream', st.curves ? 'timing from count curves' : 'totals from daily lookups', 'costs nothing'] }
+                           : { title: st.rtMode === 'sample' ? 'Sample retweets' : 'Download retweets', color: TYPE.retweets, lines: [st.rtMode === 'all' ? 'every retweet' : st.rtMode === 'sample' ? 'a random ' + Math.round(100 * st.rtRate) + '% by stream rule' : 'first ' + int(st.rtN) + ' of each', st.rtShare < 0.995 ? 'for ' + Math.round(100 * st.rtShare) + '% of cascades' : 'for every cascade', 'costs ' + big(r.retweets) + ' units'] },
       { title: 'Collected', color: col, fill: true, lines: [big(r.cascades) + ' cascades a month', pct(r.downloaded / r.allPosts) + ' of posts downloaded', big(r.total) + ' units, ' + pct(r.total / st.cap) + ' of cap'] },
     ];
     const f = frame('c-flow', wide ? BH + 34 : boxes.length * BH + (boxes.length - 1) * 24 + 10, 'The cascade plan as a flow: find, check size, download replies and quotes, retweets, result');
@@ -145,7 +156,7 @@
 
   function drawMix(pop, r) {
     const rows = [
-      ['Retweets', r.allRt, r.retweets, TYPE.retweets, st.rtMode === 'none' ? (st.stream > 0 ? 'stream sample and daily counts only' : 'daily counts only') : pct(r.retweets / r.allRt) + ' downloaded'],
+      ['Retweets', r.allRt, r.retweets, TYPE.retweets, st.rtMode === 'none' ? (st.stream > 0 ? 'stream sample' : 'none seen') + (st.curves ? ', timing from counts' : ', totals from lookups') : pct(r.retweets / r.allRt) + ' downloaded' + (st.curves ? ', timing of all from counts' : '')],
       ['Replies and roots', r.replies, r.replies, TYPE.replies, 'downloaded in full'],
       ['Quotes', (pop.Q(st.cut)) * r.found, r.quotes, TYPE.quotes, st.quotes ? 'downloaded in full' : 'left out'],
     ];
@@ -243,11 +254,11 @@
       ['Cascades collected a month', big(r.cascades), st.stream > 0 ? pct(r.found) + ' of the ' + big(pop.N(st.cut)) + ' with ' + sizeTxt + ' are flagged' : 'all ' + big(pop.N(st.cut)) + ' with ' + sizeTxt],
       ['Units spent a month', big(r.total), pct(r.total / st.cap) + ' of the cap; ' + big(Math.max(0, st.cap - r.total)) + ' to spare'],
       ['Share of their posts downloaded', pct(r.downloaded / r.allPosts), big(r.downloaded) + ' of ' + big(r.allPosts) + ' posts'],
-      st.stream > 0 ? ['Retweets seen in the stream', big(r.sampledRt), 'a ' + (100 * st.stream) + '% sample of ' + big(r.allRt) + ', outside the cap'] : ['Retweets seen in the stream', 'none', 'no stream; totals come from the daily counts'],
+      ['Retweeters seen', big(r.sampledRt + r.retweets), (st.stream > 0 ? big(r.sampledRt) + ' in the ' + (100 * st.stream) + '% stream, outside the cap' : 'no stream') + (r.retweets > 0 ? '; ' + big(r.retweets) + ' bought' : '') + '; of ' + big(r.allRt) + ' retweets'],
     ];
     document.getElementById('c-kpis').innerHTML = k.map(([a, b, s]) => '<div class="kpi"><div class="k">' + a + '</div><div class="v">' + b + '</div><div class="s">' + s + '</div></div>').join('');
     document.getElementById('c-sub-flow').textContent = 'The plan in the headline, step by step, in numbers a month. One unit is the charge for one post.';
-    document.getElementById('c-sub-mix').textContent = 'Posts in cascades of ' + sizeTxt + ', by kind. The solid part of each bar is downloaded. Retweets are ' + pct(r.allRt / r.allPosts) + ' of the posts, so they decide what fits.';
+    document.getElementById('c-sub-mix').textContent = 'Posts in cascades of ' + sizeTxt + ', by kind. The solid part of each bar is downloaded. Retweets are ' + pct(r.allRt / r.allPosts) + ' of the posts, so they decide what fits.' + (st.curves ? ' Count curves give the minute-by-minute timing of every retweet without downloading any.' : '');
     const fitAll = CASCADE.reach(pop, opts({ quotes: true, rtMode: 'all', rtShare: 1 }), st.cap), fitRQ = CASCADE.reach(pop, opts({ quotes: true, rtMode: 'none' }), st.cap);
     document.getElementById('c-sub-fit').textContent = 'Units a month against the smallest cascade collected. Below the cap line fits. Replies and quotes fit from about ' + (fitRQ ? int(+fitRQ.toPrecision(2)) : '?') + '+ posts; every post fits only from about ' + (fitAll ? int(+fitAll.toPrecision(2)) : '?') + '+.';
     document.getElementById('c-sub-find').textContent = st.stream > 0

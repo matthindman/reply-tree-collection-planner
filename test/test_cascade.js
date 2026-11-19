@@ -29,6 +29,12 @@ check('size floor the 1.57M corresponds to', pop.floorOfAll, 194, 3);
   check('size from which everything fits a 100M cap', cutAll, 12000, 1500);
   check('at that size the plan is within the cap', C.plan(pop, Object.assign({}, base, { rtMode: 'all', cut: cutAll })).total <= 100e6 ? 1 : 0, 1, 0);
   check('1% stream flags cascades of 100+ (one hit)', C.flagged(pop, 100, 0.01, 1), 0.80, 0.06);
+  const cv = C.plan(pop, Object.assign({}, base, { curves: 3, curveCut: 1000, curveCost: 1 }));
+  check('count curves: three requests for every cascade of 1,000+', cv.curves, 3 * 122000, 30);
+  check('count curves add to the total', cv.total - r.total, cv.curves, 1e-6);
+  check('count curves for every cascade of 200+', C.plan(pop, Object.assign({}, base, { curves: 1, curveCut: 200, curveCost: 1 })).curves / 1e6, pop.N(200) * C.flagged(pop, 200, 0.01, 1) / 1e6, 1e-6);
+  check('a 3% bought sample of retweets', C.plan(pop, Object.assign({}, base, { rtMode: 'sample', rtRate: 0.03 })).retweets / 1e6, 0.03 * 0.87 * 340, 0.01);
+  check('the first 75 retweets of every cascade of 1,000+', C.plan(pop, Object.assign({}, base, { rtMode: 'first', rtN: 75 })).retweets / 1e6, 0.075 * 122, 0.02);
   check('no stream: finding costs a daily search hit per watched root', C.plan(pop, Object.assign({}, base, { stream: 0 })).finding, 3 * pop.N(500), 1); }
 console.log(failed ? '\n' + failed + ' check(s) FAILED' : '\nall checks passed');
 process.exit(failed ? 1 : 0);

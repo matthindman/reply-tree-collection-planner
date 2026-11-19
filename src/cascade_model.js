@@ -49,21 +49,27 @@
   }
 
   /* One plan at one size cutoff.
-     o: { cut, quotes, under, rtMode: 'none'|'first'|'all', rtN, rtShare, days,
-          stream: 0 | rate, streamInCap, streamVolume, hits } */
+     o: { cut, quotes, under, rtMode: 'none'|'sample'|'first'|'all', rtN, rtRate, rtShare, days,
+          stream: 0 | rate, streamInCap, streamVolume, hits,
+          curves: count curves bought per cascade (retweets, replies, quotes), curveCut, curveCost }
+     rtMode 'sample' buys a random share rtRate of retweets (a filtered-stream rule with sample:N). */
   function plan(pop, o) {
     const s = o.cut, found = o.stream > 0 ? flagged(pop, s, o.stream, o.hits || 1) : 1;
     const cascades = pop.N(s) * found;
     const replies = (1 - pop.rt) * pop.P(s) * found;                       // roots included
     const quotes = o.quotes ? pop.Q(s) * found : 0, under = o.quotes ? quotes * (o.under || 0) : 0;
     const allRt = pop.rt * pop.P(s) * found;
-    const retweets = o.rtMode === 'all' ? allRt * o.rtShare : o.rtMode === 'first' ? pop.rtFirst(s, o.rtN) * found * o.rtShare : 0;
+    const retweets = o.rtMode === 'all' ? allRt * o.rtShare : o.rtMode === 'first' ? pop.rtFirst(s, o.rtN) * found * o.rtShare
+      : o.rtMode === 'sample' ? allRt * (o.rtRate || 0) * o.rtShare : 0;
+    // count curves: one request per curve covers the whole window at minute granularity
+    const curveCut = o.curveCut || s, curved = o.curves > 0 ? pop.N(curveCut) * (o.stream > 0 ? flagged(pop, curveCut, o.stream, o.hits || 1) : 1) : 0;
+    const curves = (o.curves || 0) * (o.curveCost == null ? 1 : o.curveCost) * curved;
     const watched = pop.N(s / 2);                                          // cascades whose counts are looked up daily
     const checks = o.days * watched;
     const finding = o.stream > 0 ? (o.streamInCap ? o.streamVolume : 0) : o.days * watched;   // no stream: search roots by repost count
-    const total = replies + quotes + under + retweets + checks + finding;
+    const total = replies + quotes + under + retweets + checks + finding + curves;
     const allPosts = (pop.P(s) + pop.Q(s)) * found;
-    return { cut: s, found, cascades, replies, quotes, under, retweets, checks, finding, total, watched,
+    return { cut: s, found, cascades, replies, quotes, under, retweets, checks, finding, curves, curved, total, watched,
              allRt, allPosts, downloaded: replies + quotes + retweets, sampledRt: o.stream > 0 ? o.stream * allRt : 0 };
   }
 

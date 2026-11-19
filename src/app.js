@@ -6,7 +6,7 @@
 
   /* ====================================================================== CONFIG */
   const CONFIG = {
-    version: 'Draft 12 · 19 November 2026',
+    version: 'Draft 13 · 19 November 2026',
     // Fitted parameters of the reply-tree model (general_model/fits). Japan 2011 is the default.
     models: {
       // Best guess for Japanese X today: a full parameter set calibrated to the prior assessments (data/calibrate_today.js).
@@ -58,10 +58,10 @@
   /* ====================================================================== formatting */
   const big = (n) => {
     if (!isFinite(n)) return '–';
-    const a = Math.abs(n);
-    if (a >= 1e9) return (n / 1e9).toPrecision(a >= 1e10 ? 3 : 2).replace(/\.0+$/, '') + 'B';
-    if (a >= 1e6) return (n / 1e6).toPrecision(a >= 1e8 ? 3 : 2).replace(/\.0+$/, '') + 'M';
-    if (a >= 1e4) return Math.round(n / 1e3) + 'k';
+    const a = Math.abs(n), two = (v) => (Math.abs(v) < 9.95 ? v.toFixed(1).replace(/\.0$/, '') : String(Math.round(v)));
+    if (a >= 999.5e6) return two(n / 1e9) + 'B';
+    if (a >= 999.5e3) return two(n / 1e6) + 'M';
+    if (a >= 9950) return Math.round(n / 1e3) + 'k';
     if (a >= 1e3) return (n / 1e3).toFixed(1).replace(/\.0$/, '') + 'k';
     if (a >= 100) return String(Math.round(n));
     if (a >= 10) return n.toFixed(0);

@@ -58,7 +58,9 @@
           <li>The monthly figures on the left are inputs, not measurements made here. Sizes above 1,000 posts follow a Pareto tail whose exponent is set by the mean size you enter. The mix of retweets, replies and quotes is taken to be the same at every size.</li>
           <li>Costs are in units. One unit is the charge for one post returned. A count lookup of a root is one unit, charged once a day.</li>
           <li>A cascade's size is read from its root's public counts. Those cover retweets, replies and quotes of the root, not retweets of its replies or of its quotes, so sizes are slightly understated.</li>
-          <li>Retweets that are not downloaded are still observed: the stream carries a random share of them, and the daily counts give the totals. What is lost is the full list of who retweeted and when.</li>
+          <li>A count request returns totals by minute for up to 31 days and is charged per request, not per post. Three requests give the timing of a cascade's retweets, replies and quotes. That X accepts these queries on the counts endpoint is documented but has not been tried on a paid account.</li>
+          <li>Retweets that are not downloaded are still observed: the stream carries a random share of them, and the count curves give how many there were in each minute. What is lost is the full list of who retweeted.</li>
+          <li>A bought sample of retweets comes through a stream rule and starts when a cascade is flagged, so it misses the earliest retweets. The first N retweets come from search, using the count curve to pick the time window.</li>
           <li>Nothing here has been tested on a paid account. The search operators for retweets, quotes and replies of a post are documented by X; their charges and completeness are assumed.</li>
           <li id="c-foot-build"></li>
         </ul>
