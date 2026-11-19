@@ -109,7 +109,7 @@
       // pol0: the plan with every candidate admitted; rest = its costs that scale with the share admitted
       const slot = res[q][fam];
       const mk = (a) => Object.assign({}, pol0, { admit: a, cost: disc + a * rest, finding: disc, counting: a * pol0.counting, wasted: a * pol0.wasted,
-                                                  reading: a * pol0.reading, recall: a * recall, found: a * pol0.found });
+                                                  reading: a * pol0.reading, recall: a * recall, found: a * pol0.found, posts: a * pol0.posts });
       if (recall >= opt.recall - 1e-9) {
         const a = Math.min(1, opt.recall / recall), c = disc + a * rest;
         if (!slot.atFloor || c < slot.atFloor.cost) slot.atFloor = mk(a);
@@ -128,7 +128,7 @@
         if (tr <= 0) continue;
         const wasted = base.count ? 0 : unit * readScale * Math.max(0, base.postsAll - po) + fr * Math.max(0, pgAll - pg);
         const reading = unit * readScale * po + fr * pg;
-        offer(fam, q, { family: fam, T: base.T, h: base.h, p: base.p, count: base.count, counting: base.counts, wasted, reading, found: tr, cand: base.cand, cut: j },
+        offer(fam, q, { family: fam, T: base.T, h: base.h, p: base.p, count: base.count, counting: base.counts, wasted, reading, found: tr, posts: po, cand: base.cand, cut: j },
               base.disc, base.counts + wasted + reading, tr / pop.tierW[j]);
       }
     };
@@ -159,7 +159,7 @@
     if (opt.allowSample !== false && fullStream) {
       for (let q = 0; q < nc; q++) {
         const j = cuts[q], tr = pop.tierW[j], reading = unit * tr + fr * tr / 100;
-        offer('sample', q, { family: 'sample', p: 1, h: E[j] - 1, count: false, full: true, counting: 0, wasted: 0, reading, found: tr, cand: tr, cut: j }, 0, reading, 1);
+        offer('sample', q, { family: 'sample', p: 1, h: E[j] - 1, count: false, full: true, counting: 0, wasted: 0, reading, found: tr, posts: pop.tierP[j], cand: tr, cut: j }, 0, reading, 1);
       }
     }
     // ---- reply sample alone, and root search plus sample
@@ -238,7 +238,7 @@
     const finding = pr.rootDays * cand + fr * cand / 500, counting = count === false ? 0 : pr.count * cand;
     const wasted = count === false ? unit * (posts - po) + fr * (pages - pg) : 0, reading = unit * po + fr * pg;
     return { family: 'root', T: E[t], count: count !== false, admit: 1, cost: finding + counting + wasted + reading, finding, counting, wasted, reading,
-             recall: tr / pop.tierW[j], found: tr, cand, cut: j };
+             recall: tr / pop.tierW[j], found: tr, posts: po, cand, cut: j };
   }
 
   /* Who a plan finds: by size bin and by shape (root-driven or quiet-root). */

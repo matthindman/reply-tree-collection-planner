@@ -183,7 +183,7 @@ table.ptable tr.sec td { border-top: 1px solid var(--line-2); padding-top: 12px;
   <header class="top">
     <div>
       <h1>Reply Tree Collection Planner</h1>
-      <p>Set your assumptions on the left. The right side shows the plan, what it costs and which conversations it misses, and updates as you go.</p>
+      <p>Set your assumptions about Japanese-language X, the API contract and what you want to collect. The results update as you move a control: the plan, what it costs, and which conversations it misses.</p>
     </div>
     <div class="top-actions">
       <span class="status" id="status"></span>
@@ -216,7 +216,7 @@ table.ptable tr.sec td { border-top: 1px solid var(--line-2); padding-top: 12px;
       </section>
 
       <section class="card">
-        <h3>What each strategy buys</h3>
+        <h3>What each way of finding buys</h3>
         <p class="sub" id="sub-frontier"></p>
         <div class="legend" id="leg-frontier"></div>
         <div class="chart" id="ch-frontier"></div>
@@ -254,11 +254,11 @@ table.ptable tr.sec td { border-top: 1px solid var(--line-2); padding-top: 12px;
 
       <section class="card">
         <h3>The model behind the conversations</h3>
-        <p class="sub">The planner draws every conversation from one model with three parts. The charts below change as you move the model controls on the left.</p>
+        <p class="sub">The planner generates every conversation at random from one model with three parts. The charts below change as you move the model controls on the left.</p>
         <div class="model-text">
-          <div><h4>A root draws its direct replies</h4><p>Most roots get one reply. A small popular group gets tens, hundreds or thousands. <em>Roots in the popular group</em> sets how many roots are in that group; <em>Reach of the most popular posts</em> sets how large they get.</p></div>
-          <div><h4>Each reply is answered, or not</h4><p>A reply that is answered usually gets exactly one reply, which is how a back-and-forth exchange grows. The chance is lower under a popular root and varies between conversations. The two <em>get an answer</em> controls and <em>Difference between conversations</em> set it.</p></div>
-          <div><h4>Now and then an exchange splits</h4><p>The last reply in an exchange sometimes draws several replies at once, and each starts a new exchange. <em>Side threads</em> sets how often.</p></div>
+          <div><h4>An original post (root) draws its direct replies</h4><p>Most roots that get any reply get exactly one. A small popular group gets tens, hundreds or thousands. <em>Roots in the popular group</em> sets how many roots are in that group; <em>Reach of the most popular posts</em> sets how large they get.</p></div>
+          <div><h4>Each reply is answered, or not</h4><p>A reply that gets an answer usually gets exactly one, and chains of single answers make a back-and-forth exchange. The chance is lower under a popular root and varies between conversations. The two <em>get an answer</em> controls and <em>Difference between conversations</em> set it.</p></div>
+          <div><h4>Now and then an exchange splits</h4><p>When an exchange stops, its last reply sometimes gets several replies at once. Each starts a new exchange. <em>Side threads</em> sets how often.</p></div>
         </div>
         <h4 class="fig">The equations</h4>
         <ol class="eqs">
@@ -296,9 +296,9 @@ table.ptable tr.sec td { border-top: 1px solid var(--line-2); padding-top: 12px;
           <li>Conversations are drawn from the reply-tree model described above. The page opens on a working guess for Japanese X today. It is not a measurement: no measurement of Japanese reply trees after 2011 was found.</li>
           <li>Charges are in units. One unit is the charge for one post on X's public price list; counts and other charges are converted at the prices on the left. Whether they draw on your quota depends on the contract. Nothing here has been tested on a paid account.</li>
           <li>Monthly volume and conversation shape rest on different counts. The default volume is an estimate of Japanese-written replies; the shapes describe conversations under Japanese roots.</li>
-          <li>The plan shown is the best of those tried: root search, a reply sample, or both; with or without a count; keeping all candidates or a random share. Sizes and thresholds are tried on a grid, so &ldquo;smallest size&rdquo; means the smallest size tried.</li>
+          <li>The plan shown is the best of those tried: root search, a reply sample, or both; with or without a size check; keeping every flagged conversation or a random share. Every plan downloads what it keeps in full, or up to the read limit. Skipping the very largest conversations would collect more conversations and miss the largest ones; no plan here does that. Sizes and thresholds are tried on a grid, so &ldquo;smallest size&rdquo; means the smallest size tried.</li>
           <li>The model is static. A conversation is judged on its final size; waiting times, deletions and replies not tagged as Japanese are not modelled.</li>
-          <li>Scenarios are what-if cases, not probability bounds. Low end and High end change only the share of popular roots, which also changes how many conversations are quiet-root.</li>
+          <li>The best guess and its variants come from two desk reviews (GPT Pro and Claude Opus). In the second round each was given the first round&rsquo;s targets, so their agreement is partly built in. Scenarios are what-if cases, not probability bounds. Low end and High end change only the share of popular roots, which also changes how many conversations are quiet-root.</li>
           <li>Moving a model control starts a fresh simulation, whose results carry a few percent of sampling noise. The scenario buttons load larger, steadier runs.</li>
           <li id="foot-build"></li>
         </ul>
@@ -658,7 +658,7 @@ if (typeof module !== 'undefined') module.exports = SCENARIO_TABLES;
       // pol0: the plan with every candidate admitted; rest = its costs that scale with the share admitted
       const slot = res[q][fam];
       const mk = (a) => Object.assign({}, pol0, { admit: a, cost: disc + a * rest, finding: disc, counting: a * pol0.counting, wasted: a * pol0.wasted,
-                                                  reading: a * pol0.reading, recall: a * recall, found: a * pol0.found });
+                                                  reading: a * pol0.reading, recall: a * recall, found: a * pol0.found, posts: a * pol0.posts });
       if (recall >= opt.recall - 1e-9) {
         const a = Math.min(1, opt.recall / recall), c = disc + a * rest;
         if (!slot.atFloor || c < slot.atFloor.cost) slot.atFloor = mk(a);
@@ -677,7 +677,7 @@ if (typeof module !== 'undefined') module.exports = SCENARIO_TABLES;
         if (tr <= 0) continue;
         const wasted = base.count ? 0 : unit * readScale * Math.max(0, base.postsAll - po) + fr * Math.max(0, pgAll - pg);
         const reading = unit * readScale * po + fr * pg;
-        offer(fam, q, { family: fam, T: base.T, h: base.h, p: base.p, count: base.count, counting: base.counts, wasted, reading, found: tr, cand: base.cand, cut: j },
+        offer(fam, q, { family: fam, T: base.T, h: base.h, p: base.p, count: base.count, counting: base.counts, wasted, reading, found: tr, posts: po, cand: base.cand, cut: j },
               base.disc, base.counts + wasted + reading, tr / pop.tierW[j]);
       }
     };
@@ -708,7 +708,7 @@ if (typeof module !== 'undefined') module.exports = SCENARIO_TABLES;
     if (opt.allowSample !== false && fullStream) {
       for (let q = 0; q < nc; q++) {
         const j = cuts[q], tr = pop.tierW[j], reading = unit * tr + fr * tr / 100;
-        offer('sample', q, { family: 'sample', p: 1, h: E[j] - 1, count: false, full: true, counting: 0, wasted: 0, reading, found: tr, cand: tr, cut: j }, 0, reading, 1);
+        offer('sample', q, { family: 'sample', p: 1, h: E[j] - 1, count: false, full: true, counting: 0, wasted: 0, reading, found: tr, posts: pop.tierP[j], cand: tr, cut: j }, 0, reading, 1);
       }
     }
     // ---- reply sample alone, and root search plus sample
@@ -787,7 +787,7 @@ if (typeof module !== 'undefined') module.exports = SCENARIO_TABLES;
     const finding = pr.rootDays * cand + fr * cand / 500, counting = count === false ? 0 : pr.count * cand;
     const wasted = count === false ? unit * (posts - po) + fr * (pages - pg) : 0, reading = unit * po + fr * pg;
     return { family: 'root', T: E[t], count: count !== false, admit: 1, cost: finding + counting + wasted + reading, finding, counting, wasted, reading,
-             recall: tr / pop.tierW[j], found: tr, cand, cut: j };
+             recall: tr / pop.tierW[j], found: tr, posts: po, cand, cut: j };
   }
 
   /* Who a plan finds: by size bin and by shape (root-driven or quiet-root). */
@@ -860,7 +860,7 @@ const SIM_SOURCE = "/* sim.js \u2014 the stochastic reply-tree model (GRT, 18 pa
 
   /* ====================================================================== CONFIG */
   const CONFIG = {
-    version: 'Draft 10 · 19 November 2026',
+    version: 'Draft 11 · 19 November 2026',
     // Fitted parameters of the reply-tree model (general_model/fits). Japan 2011 is the default.
     models: {
       // Best guess for Japanese X today: a full parameter set calibrated to the prior assessments (data/calibrate_today.js).
@@ -887,13 +887,13 @@ const SIM_SOURCE = "/* sim.js \u2014 the stochastic reply-tree model (GRT, 18 pa
     },
     // One-click scenarios. Each sets the population controls; `table` names a precomputed population
     // (src/ref_tables.js, src/scenario_tables.js) so it loads at once. The four prior scenarios are calibrated
-    // to two independent assessments of late-2026 Japanese X (data/calibrate.js).
+    // to two desk reviews of late-2026 Japanese X (data/scenarios.json, data/make_scenarios.js).
     scenarios: {
-      today: { label: 'Best guess for Japanese X today', table: 'today', primary: true, set: { mix: 0, replies: 5e8 }, note: 'A working guess, not a measurement: GPT Pro\u2019s preset, which comes closest to the targets the two desk analyses were given.' },
-      low: { label: 'Low end', table: 'low', set: { mix: 0 }, note: 'Best guess with fewer popular roots, near the low end of both analyses\u2019 ranges. It also has more quiet-root conversations.' },
-      high: { label: 'High end', table: 'high', set: { mix: 0 }, note: 'Best guess with more popular roots, near the high end of both analyses\u2019 ranges. It also has fewer quiet-root conversations.' },
-      quiet: { label: 'Quiet-root', table: 'quiet', set: { mix: 0 }, note: 'Best guess with conversations differing more in persistence: about a third of large conversations are quiet-root, and there are somewhat more of them.' },
-      opus: { label: 'Root-driven', table: 'opus', set: { mix: 0 }, note: 'The Opus analysis\u2019s own preset: similar concentration, fewer mid-sized conversations, and seven in eight large ones root-driven.' },
+      today: { label: 'Best guess for Japanese X today', table: 'today', primary: true, set: { mix: 0, replies: 5e8 }, note: 'A working guess, not a measurement: GPT Pro\u2019s settings. Both desk reviews put about 12% of replies in conversations of 100+ posts. They differ on how many of those are quiet-root; these settings take the higher figure.' },
+      low: { label: 'Low end', table: 'low', set: { mix: 0 }, note: 'Best guess with fewer popular roots, so 3.4% of replies sit in conversations of 100+ posts, near the low end of the reviews\u2019 ranges. More of them are quiet-root.' },
+      high: { label: 'High end', table: 'high', set: { mix: 0 }, note: 'Best guess with more popular roots, so 32% of replies sit in conversations of 100+ posts, near the high end of the reviews\u2019 ranges. Fewer of them are quiet-root.' },
+      quiet: { label: 'Quiet-root', table: 'quiet', set: { mix: 0 }, note: 'Best guess with exchanges that vary more in length: 36% of conversations of 100+ posts are quiet-root.' },
+      opus: { label: 'Root-driven', table: 'opus', set: { mix: 0 }, note: 'Claude Opus\u2019s settings: similar concentration, but 87% of conversations of 100+ posts are root-driven.' },
       japan2011: { label: 'Japan 2011', table: 'japan2011', set: { mix: 0 }, note: 'The model fitted to the published 2011 curves.' },
       usArchives: { label: 'US archives', table: 'japan2011', set: { mix: 100 }, note: 'The US news and election archives, selected by topic and account.' },
     },
@@ -963,21 +963,21 @@ const SIM_SOURCE = "/* sim.js \u2014 the stochastic reply-tree model (GRT, 18 pa
   /* ====================================================================== controls */
   const GROUPS = [
     { title: 'Scenario', controls: [{ kind: 'scenario' }] },
-    { title: 'Japanese X today', controls: [
+    { title: 'Conversations on Japanese X', controls: [
       { key: 'base', kind: 'seg', label: 'Start from', options: [['today', 'Best guess'], ['opus', 'Opus'], ['japan2011', 'Japan \u201911'], ['usNews', 'US news'], ['usMidterms', 'Midterms']],
-        hint: 'Best guess and Opus are presets from today\u2019s two desk analyses. The other three are fits to older or targeted data.' },
-      { key: 'mix', kind: 'range', label: 'Replies in broadcast-style conversation', min: 0, max: 100, step: 1, fmt: (v) => v + '%',
-        hint: 'Blends in conversations like those in the US news and election archives.' },
-      { key: 'pop', kind: 'log', label: 'Roots in the popular group', min: 0.1, max: 6, fmt: () => pct(Math.min(0.95, Math.max(0.001, (1 - baseParams().w) * state.pop))),
-        hint: 'Share of roots in the group that supplies popular posts. The main control on how concentrated replies are.' },
-      { key: 'lam', kind: 'range', label: 'Reach of the most popular posts', min: 0.6, max: 1.6, step: 0.02, fmt: (v) => '×' + v.toFixed(2),
-        hint: 'How many direct replies the most popular roots get.' },
+        hint: 'Best guess and Opus come from the two desk reviews. The other three are the model fitted to 2011 Japanese data and to two US topic archives.' },
+      { key: 'mix', kind: 'range', label: 'Replies from US-archive-style conversations', min: 0, max: 100, step: 1, fmt: (v) => v + '%',
+        hint: 'Blends in conversations like those in the US news and election archives, which very popular posts dominate.' },
+      { key: 'pop', kind: 'log', label: 'Roots that can draw many replies', min: 0.1, max: 6, fmt: () => pct(Math.min(0.95, Math.max(0.001, (1 - baseParams().w) * state.pop))),
+        hint: 'Share of roots in the popular group. This control moves replies into large conversations more than any other.' },
+      { key: 'lam', kind: 'range', label: 'Reach of the most popular posts', min: 0.6, max: 1.4, step: 0.02, fmt: (v) => '×' + v.toFixed(2),
+        hint: 'Higher makes the most popular roots draw even more direct replies.' },
       { key: 'dC0', kind: 'range', label: 'Direct replies that get an answer', min: -3, max: 2, step: 0.05, fmt: () => pct(answerParts(modelParams(), 1, 0, true).any),
         hint: 'Chance of at least one reply, under a root with one reply, in a typical conversation.' },
       { key: 'dMu', kind: 'range', label: 'Later replies that get an answer', min: -1.5, max: 2, step: 0.05, fmt: () => pct(answerParts(modelParams(), 1, 0, false).any),
         hint: 'The same chance for a reply to another reply. Higher means longer exchanges.' },
-      { key: 'sigScale', kind: 'range', label: 'Difference between conversations', min: 0.4, max: 1.6, step: 0.02, fmt: (v) => '×' + v.toFixed(2),
-        hint: 'How much conversations differ in how long their exchanges run.' },
+      { key: 'sigScale', kind: 'range', label: 'Spread in persistence', min: 0.4, max: 1.6, step: 0.02, fmt: (v) => '×' + v.toFixed(2),
+        hint: 'How much longer exchanges run in some conversations than in others.' },
       { key: 'dBranch', kind: 'range', label: 'Side threads', min: -1.5, max: 1.5, step: 0.05, fmt: () => pct(answerParts(modelParams(), 1, 0, false).phi),
         hint: 'Chance that an exchange splits into several when it ends.' },
       { kind: 'facts', id: 'facts-pop' },
@@ -990,18 +990,18 @@ const SIM_SOURCE = "/* sim.js \u2014 the stochastic reply-tree model (GRT, 18 pa
     ] },
     { title: 'The contract', controls: [
       { key: 'stream', kind: 'seg', label: 'A reply stream outside the quota', options: [['none', 'None'], ['s1', '1%'], ['s10', '10%'], ['full', 'Full']],
-        hint: 'Assumes the stream carries every reply in a conversation, in any language.' },
-      { key: 'minReplies', kind: 'seg', label: 'Root search counts', options: [['direct', 'Direct replies'], ['all', 'All replies below']],
-        hint: 'What min_replies measures. X does not document it; direct replies is the best guess.' },
+        hint: 'A free feed of replies (1%, 10% or all) that does not count against the quota. Assumed to carry every reply in a conversation, in any language.' },
+      { key: 'minReplies', kind: 'seg', label: 'Root search threshold counts', options: [['direct', 'Direct replies'], ['all', 'All replies below']],
+        hint: 'Whether X\u2019s reply-count search filter counts only direct replies or every reply below the root. X does not say; direct replies is the best guess.' },
       { key: 'countPrice', kind: 'range', label: 'Price of one count request', min: 0, max: 20, step: 0.5, fmt: (v) => v + (v === 1 ? ' unit' : ' units'),
         hint: 'Set to 0 if counts do not draw on the quota.' },
-      { key: 'streamPrice', kind: 'range', label: 'Price of a bought stream post', min: 0, max: 1, step: 0.05, fmt: (v) => v.toFixed(2) + ' unit', disabled: () => state.stream !== 'none' },
+      { key: 'streamPrice', kind: 'range', label: 'Price of a bought stream post', min: 0, max: 1, step: 0.05, fmt: (v) => v.toFixed(2) + (v === 1 ? ' unit' : ' units'), disabled: () => state.stream !== 'none' },
       { kind: 'more', title: 'More billing assumptions', controls: [
         { key: 'rootDays', kind: 'range', label: 'Days a root is billed by search', min: 1, max: 30, step: 1, fmt: (v) => v + (v === 1 ? ' day' : ' days') },
         { key: 'reread', kind: 'range', label: 'Times each post is billed', min: 1, max: 3, step: 0.1, fmt: (v) => '×' + v.toFixed(1) },
-        { key: 'expansions', kind: 'range', label: 'Billed extras per post', min: 0, max: 3, step: 0.1, fmt: (v) => '+' + v.toFixed(1) },
+        { key: 'expansions', kind: 'range', label: 'Extra billed objects per post (users, media)', min: 0, max: 3, step: 0.1, fmt: (v) => '+' + v.toFixed(1) },
         { key: 'requestFee', kind: 'range', label: 'Fee per search request', min: 0, max: 50, step: 1, fmt: (v) => v + ' units' },
-        { key: 'traffic', kind: 'range', label: 'Stream posts per sampled reply', min: 1, max: 10, step: 0.5, fmt: (v) => '×' + v },
+        { key: 'traffic', kind: 'range', label: 'Stream posts paid for per reply sampled', min: 1, max: 10, step: 0.5, fmt: (v) => '×' + v },
       ] },
     ] },
     { title: 'Research choices', controls: [
@@ -1009,7 +1009,7 @@ const SIM_SOURCE = "/* sim.js \u2014 the stochastic reply-tree model (GRT, 18 pa
       { key: 'recall', kind: 'range', label: 'Share of them that must be found', min: 0.5, max: 0.99, step: 0.01, fmt: (v) => Math.round(100 * v) + '%' },
       { kind: 'checks', label: 'Ways of finding them', items: [['allowRoot', 'Root search'], ['allowSample', 'Reply sample']] },
       { key: 'cap', kind: 'pick', label: 'Of each conversation, read', choices: CONFIG.capChoices, fmt: (v) => (v ? 'first ' + int(v) + ' posts' : 'everything'),
-        hint: 'Truncating the giants buys more conversations and loses their final shape.' },
+        hint: 'Reading only the first posts of each conversation lets the quota cover more conversations, but leaves the largest ones incomplete.' },
     ] },
   ];
 
@@ -1028,7 +1028,7 @@ const SIM_SOURCE = "/* sim.js \u2014 the stochastic reply-tree model (GRT, 18 pa
         });
         host.appendChild(g); host.appendChild(note);
         refreshers.push(() => { const act = activeScenario(); btns.forEach(([name, b, sh]) => { b.setAttribute('aria-pressed', String(name === act)); sh.textContent = pct(scenarioShare(name)); });
-          note.textContent = act ? CONFIG.scenarios[act].note : 'Custom settings. The numbers are the share of replies in conversations of 100+ posts.'; });
+          note.textContent = act ? CONFIG.scenarios[act].note : 'Custom settings. Each number above is the share of replies in conversations of 100+ posts.'; });
         return;
       }
       if (c.kind === 'more') {
@@ -1155,7 +1155,7 @@ const SIM_SOURCE = "/* sim.js \u2014 the stochastic reply-tree model (GRT, 18 pa
   }
   /* A plan trimmed to find exactly the required share, put back to keeping every candidate. */
   const whole = (pol) => { const a = pol.admit; if (!(a < 1)) return pol; const rest = (pol.cost - pol.finding) / a;
-    return Object.assign({}, pol, { admit: 1, cost: pol.finding + rest, counting: pol.counting / a, wasted: pol.wasted / a, reading: pol.reading / a, recall: pol.recall / a, found: pol.found / a }); };
+    return Object.assign({}, pol, { admit: 1, cost: pol.finding + rest, counting: pol.counting / a, wasted: pol.wasted / a, reading: pol.reading / a, recall: pol.recall / a, found: pol.found / a, posts: pol.posts / a }); };
   function analyse(pop, full) {
     const budget = state.quota / state.replies;
     const pr = { streamPost: state.streamPrice, traffic: state.traffic, count: state.countPrice, rootDays: state.rootDays, reread: state.reread, expansions: state.expansions, requestFee: state.requestFee };
@@ -1197,15 +1197,15 @@ const SIM_SOURCE = "/* sim.js \u2014 the stochastic reply-tree model (GRT, 18 pa
   }
   function recipe(pol, cut) {
     const parts = [], unit = state.minReplies === 'all' ? 'replies below them' : 'direct replies';
-    if (pol.T) parts.push('Search for original posts with at least ' + int(pol.T) + ' ' + unit + '.');
-    if (pol.full) { parts.push('Keep the full stream. It already holds every reply, so sizes are known; fetch only the root of each conversation that reaches ' + int(cut) + ' posts.'); }
+    if (pol.T) parts.push('Search for original posts (roots) with at least ' + int(pol.T) + ' ' + unit + '.');
+    if (pol.full) { parts.push('Keep the full stream. It already holds every reply, so sizes are known. Download only the root of each conversation with ' + int(cut) + '+ posts.'); }
     else {
-      if (pol.p) parts.push((state.stream !== 'none' ? 'Take the ' + pShow(pol.p) + ' stream' : 'Buy a ' + pShow(pol.p) + ' sample of replies')
-        + ' and treat a conversation as a candidate at its ' + ord(pol.h) + ' sampled reply.');
-      if (pol.admit < 0.995) parts.push('Keep a random ' + pct(pol.admit) + ' of the candidates.');
-      parts.push(pol.count ? 'Count each ' + (pol.admit < 0.995 ? 'kept ' : '') + 'candidate once and fetch those that reach ' + int(cut) + ' posts.' : 'Fetch every ' + (pol.admit < 0.995 ? 'kept ' : '') + 'candidate without counting.');
+      if (pol.p) parts.push((state.stream !== 'none' ? 'Take the free ' + pShow(pol.p) + ' stream of replies.' : 'Buy a random ' + pShow(pol.p) + ' of replies.')
+        + ' Flag a conversation once ' + (pol.h === 1 ? 'one of its replies appears' : pol.h + ' of its replies appear') + ' in the sample.');
+      if (pol.admit < 0.995) parts.push('Keep a random ' + pct(pol.admit) + ' of the flagged conversations.');
+      parts.push(pol.count ? 'Look up the size of each ' + (pol.admit < 0.995 ? 'one kept' : 'flagged conversation') + ' (one count request) and download those with ' + int(cut) + '+ posts.' : 'Download every ' + (pol.admit < 0.995 ? 'one kept' : 'flagged conversation') + ' without checking its size first.');
     }
-    if (state.cap) parts.push('Read only the first ' + int(state.cap) + ' posts of each.');
+    if (state.cap) parts.push('Download only the first ' + int(state.cap) + ' posts of each.');
     return parts.join(' ');
   }
 
@@ -1257,17 +1257,17 @@ const SIM_SOURCE = "/* sim.js \u2014 the stochastic reply-tree model (GRT, 18 pa
     const unit = state.minReplies === 'all' ? 'replies below' : 'direct replies';
     const adm = c.admit == null ? 1 : c.admit, part = adm < 0.995, kept = adm * c.cand, small = Math.max(0, kept - c.found);
     const boxes = {
-      root: c.T ? { on: true, color: 'var(--root)', title: 'Root search', lines: ['roots with ' + int(c.T) + '+ ' + unit, big(rootCand * R) + ' candidates a month', 'costs ' + big(rootCost * R) + ' units'] }
+      root: c.T ? { on: true, color: 'var(--root)', title: 'Root search', lines: ['roots with ' + int(c.T) + '+ ' + unit, big(rootCand * R) + ' flagged a month', 'costs ' + big(rootCost * R) + ' units'] }
                 : { on: false, title: 'Root search', lines: ['not used in this plan'] },
       sample: c.full ? { on: true, color: 'var(--sample)', title: 'Full reply stream', lines: ['already holds every reply', big(c.cand * R) + ' reach ' + int(d.cut) + ' posts', 'outside the quota'] }
             : c.p ? { on: true, color: 'var(--sample)', title: free ? 'Free ' + pShow(c.p) + ' reply stream' : pShow(c.p) + ' reply sample',
-                      lines: ['candidate at ' + ord(c.h) + ' sampled reply', big(sampleCand * R) + ' candidates a month', free ? 'outside the quota' : 'costs ' + big(streamCost * R) + ' units'] }
+                      lines: ['flagged at the ' + ord(c.h) + ' sampled reply', big(sampleCand * R) + ' flagged a month', free ? 'outside the quota' : 'costs ' + big(streamCost * R) + ' units'] }
                   : { on: false, title: 'Reply sample', lines: ['not used in this plan'] },
-      count: c.full ? { on: true, title: 'No count needed', lines: ['sizes are known from the stream', 'nothing is dropped', 'costs nothing'] }
-           : c.count ? { on: true, title: part ? 'Keep ' + pct(adm) + ', count each once' : 'Count each candidate once', lines: [big(kept * R) + ' counts at ' + state.countPrice + (state.countPrice === 1 ? ' unit' : ' units'), big(small * R) + ' too small, dropped', 'costs ' + big(c.counting * R) + ' units'] }
-                     : { on: true, title: part ? 'Keep ' + pct(adm) + ', no count' : 'No count', lines: [big(kept * R) + ' candidates fetched', big(small * R) + ' turn out too small', 'costs nothing'] },
-      fetch: c.full ? { on: true, title: 'Fetch the roots', lines: [big(c.found * R) + ' roots, one post each', 'replies are already in hand', 'costs ' + big(c.reading * R) + ' units'] }
-           : { on: true, title: 'Fetch the conversation', lines: [big(c.found * R) + ' reach ' + int(d.cut) + ' posts', state.cap ? 'first ' + int(state.cap) + ' posts of each' : c.wasted > 0 ? big(c.wasted * R) + ' units on ones too small' : 'each post read once', 'costs ' + big((c.reading + c.wasted) * R) + ' units'] },
+      count: c.full ? { on: true, title: 'No size check needed', lines: ['sizes are known from the stream', 'nothing is skipped', 'costs nothing'] }
+           : c.count ? { on: true, title: part ? 'Keep ' + pct(adm) + ', check each size' : 'Check each one\u2019s size', lines: [big(kept * R) + ' count requests at ' + state.countPrice + (state.countPrice === 1 ? ' unit' : ' units'), big(small * R) + ' under ' + int(d.cut) + ' posts, skipped', 'costs ' + big(c.counting * R) + ' units'] }
+                     : { on: true, title: part ? 'Keep ' + pct(adm) + ', no size check' : 'No size check', lines: [big(kept * R) + ' downloaded unchecked', big(small * R) + ' turn out under ' + int(d.cut) + ' posts', 'costs nothing'] },
+      fetch: c.full ? { on: true, title: 'Download the roots', lines: [big(c.found * R) + ' roots, one post each', 'replies are already in hand', 'costs ' + big(c.reading * R) + ' units'] }
+           : { on: true, title: 'Download the conversation', lines: [big(c.found * R) + ' with ' + int(d.cut) + '+ posts', state.cap ? 'first ' + int(state.cap) + ' posts of each' : c.wasted > 0 ? big(c.wasted * R) + ' units on ones too small' : 'each post read once', 'costs ' + big((c.reading + c.wasted) * R) + ' units'] },
       done: { on: true, color: col, fill: true, title: 'Collected', lines: [big(c.found * R) + ' conversations a month', pct(c.recall) + ' of the ' + big(d.at.tierW * R) + ' of ' + int(d.cut) + '+ posts', big(c.cost * R) + ' units, ' + pct(c.cost / d.budget) + ' of quota'] },
     };
     const wide = host.clientWidth >= 760, BH = 90, uid = 'lg' + (drawLogic.n = (drawLogic.n || 0) + 1);
@@ -1291,18 +1291,18 @@ const SIM_SOURCE = "/* sim.js \u2014 the stochastic reply-tree model (GRT, 18 pa
       box(boxes.root, xs[0], yTop, wf); box(boxes.sample, xs[0], yTop + BH + 16, wf);
       box(boxes.count, xs[1], yMid, wo); box(boxes.fetch, xs[2], yMid, wo); box(boxes.done, xs[3], yMid, wo);
       el('text', { x: xs[0] + 2, y: yTop + 2 * BH + 16 + 16, class: 'tick' }, f.svg, 'FIND');
-      el('text', { x: xs[1] + 2, y: yMid + BH + 16, class: 'tick' }, f.svg, 'CHECK THE SIZE'); el('text', { x: xs[2] + 2, y: yMid + BH + 16, class: 'tick' }, f.svg, 'READ'); el('text', { x: xs[3] + 2, y: yMid + BH + 16, class: 'tick' }, f.svg, 'RESULT');
+      el('text', { x: xs[1] + 2, y: yMid + BH + 16, class: 'tick' }, f.svg, 'CHECK SIZE'); el('text', { x: xs[2] + 2, y: yMid + BH + 16, class: 'tick' }, f.svg, 'DOWNLOAD'); el('text', { x: xs[3] + 2, y: yMid + BH + 16, class: 'tick' }, f.svg, 'RESULT');
     } else {
       const w = f.w - 4, x = 2, order = ['root', 'sample', 'count', 'fetch', 'done'];
       order.forEach((k, i) => { const y = 4 + i * (BH + 26); box(boxes[k], x, y, w); if (i === 0) el('text', { x: x + w / 2, y: y + BH + 18, 'text-anchor': 'middle', class: 'strong' }, f.svg, 'and'); else if (i < order.length - 1) arrow('M' + (x + w / 2) + ' ' + (y + BH + 3) + 'V' + (y + BH + 23)); });
     }
     const q = c.cover ? c.cover.foundQuiet : null;
-    document.getElementById('sub-logic').textContent = 'The plan in the headline, step by step, with monthly numbers. A way of finding that the plan does not use is shown dashed. One unit is the charge for one post.'
+    document.getElementById('sub-logic').textContent = 'The headline plan, step by step, in numbers a month. Dashed boxes are not used by this plan. One unit is the charge for one post.'
       + (q != null ? ' It misses ' + big(Math.max(0, d.at.tierW - c.found) * R) + ' conversations of ' + int(d.cut) + '+ posts a month, and finds ' + pct(q) + ' of the quiet-root ones.' : '');
   }
 
   function drawFrontier(d) {
-    const R = state.replies, f = frame('ch-frontier', 330, 'Share of target conversations found against units charged each month, by strategy');
+    const R = state.replies, f = frame('ch-frontier', 330, 'Share of target conversations found against units spent each month, by way of finding');
     const m = { l: 46, r: 18, t: 22, b: 42 }, x0 = m.l, x1 = f.w - m.r, y0 = f.h - m.b, y1 = m.t;
     const fr = d.ev.frontier; let lo = Infinity, hi = 0;
     for (const k of FAMS) if (fr[k].length) { lo = Math.min(lo, fr[k][0][0]); hi = Math.max(hi, fr[k][fr[k].length - 1][0]); }
@@ -1314,14 +1314,14 @@ const SIM_SOURCE = "/* sim.js \u2014 the stochastic reply-tree model (GRT, 18 pa
     for (const v of [0, 0.25, 0.5, 0.75, 1]) { el('line', { x1: x0, x2: x1, y1: Y(v), y2: Y(v), stroke: 'var(--grid)' }, f.svg); el('text', { x: x0 - 8, y: Y(v) + 4, 'text-anchor': 'end', class: 'tick' }, f.svg, Math.round(100 * v) + '%'); }
     for (const v of logTicks(dx0, dx1)) { el('line', { x1: X(v), x2: X(v), y1: y0, y2: y0 + 5, stroke: 'var(--line-2)' }, f.svg); el('text', { x: X(v), y: y0 + 18, 'text-anchor': 'middle', class: 'tick' }, f.svg, big(v)); }
     el('line', { x1: x0, x2: x1, y1: y0, y2: y0, stroke: 'var(--line-2)' }, f.svg);
-    el('text', { x: (x0 + x1) / 2, y: f.h - 6, 'text-anchor': 'middle' }, f.svg, 'Units charged each month (log scale)');
+    el('text', { x: (x0 + x1) / 2, y: f.h - 6, 'text-anchor': 'middle' }, f.svg, 'Units spent a month (log scale)');
     // floor and quota
     el('line', { x1: x0, x2: x1, y1: Y(state.recall), y2: Y(state.recall), stroke: 'var(--ink-3)', 'stroke-dasharray': '3 4' }, f.svg);
     el('text', { x: x0 + 6, y: Y(state.recall) - 6 }, f.svg, 'must find ' + Math.round(100 * state.recall) + '%');
     el('line', { x1: X(quota), x2: X(quota), y1: y1 - 6, y2: y0, stroke: 'var(--ink)', 'stroke-width': 1.25 }, f.svg);
     const qRight = X(quota) < x1 - 90;
     el('text', { x: X(quota) + (qRight ? 6 : -6), y: y1 - 8, 'text-anchor': qRight ? 'start' : 'end', class: 'strong' }, f.svg, 'Quota ' + big(quota));
-    if (R > dx0 && R < dx1 && Math.abs(X(R) - X(quota)) > 70) { el('line', { x1: X(R), x2: X(R), y1: y1, y2: y0, stroke: 'var(--line-2)', 'stroke-dasharray': '2 3' }, f.svg); el('text', { x: X(R) - 5, y: y0 - 8, 'text-anchor': 'end' }, f.svg, 'every reply, once'); }
+    if (R > dx0 && R < dx1 && Math.abs(X(R) - X(quota)) > 70) { el('line', { x1: X(R), x2: X(R), y1: y1, y2: y0, stroke: 'var(--line-2)', 'stroke-dasharray': '2 3' }, f.svg); el('text', { x: X(R) - 5, y: y0 - 8, 'text-anchor': 'end' }, f.svg, 'reading every reply once'); }
     // lines
     for (const k of FAMS) {
       if (!fr[k].length) continue;
@@ -1350,7 +1350,7 @@ const SIM_SOURCE = "/* sim.js \u2014 the stochastic reply-tree model (GRT, 18 pa
 
   function drawBars(d) {
     const R = state.replies, fams = FAMS.filter((k) => d.show[k]), rowH = 58;
-    const f = frame('ch-bars', fams.length * rowH + 40, 'Units charged each month by strategy, split into finding, counting and reading');
+    const f = frame('ch-bars', fams.length * rowH + 40, 'Units spent each month by way of finding, split into finding, size checks and downloading');
     const m = { l: 8, r: 64, t: 6 }, x0 = m.l, x1 = f.w - m.r;
     const maxC = Math.max.apply(null, fams.map((k) => d.show[k].cost * R));
     const X = lin(0, maxC * 1.02, x0, x1), y0 = m.t + fams.length * rowH;
@@ -1372,8 +1372,8 @@ const SIM_SOURCE = "/* sim.js \u2014 the stochastic reply-tree model (GRT, 18 pa
       const hit = el('rect', { x: x0, y: y + 4, width: x1 - x0, height: rowH - 8, fill: 'transparent' }, f.svg);
       hit.addEventListener('pointermove', (ev) => {
         const b = f.svg.getBoundingClientRect();
-        f.showTip(ev.clientX - b.left, ev.clientY - b.top, '<b>' + famName(p) + '</b>' + row('', 'Reading the conversations', big(p.reading * R)) + row('', 'Finding them', big(p.finding * R))
-          + row('', 'Counting candidates', big(p.counting * R)) + (p.wasted > 0 ? row('', 'Read, then discarded', big(p.wasted * R)) : '') + row('', 'Total', big(p.cost * R) + ' · ' + pct(p.cost * R / quota) + ' of quota'));
+        f.showTip(ev.clientX - b.left, ev.clientY - b.top, '<b>' + famName(p) + '</b>' + row('', 'Downloading the conversations', big(p.reading * R)) + row('', 'Finding them', big(p.finding * R))
+          + row('', 'Size checks', big(p.counting * R)) + (p.wasted > 0 ? row('', 'Read, then discarded', big(p.wasted * R)) : '') + row('', 'Total', big(p.cost * R) + ' · ' + pct(p.cost * R / quota) + ' of quota'));
       });
       hit.addEventListener('pointerleave', f.hideTip);
     });
@@ -1382,7 +1382,7 @@ const SIM_SOURCE = "/* sim.js \u2014 the stochastic reply-tree model (GRT, 18 pa
     for (let v = 0; v <= maxC * 1.02; v += step) { el('line', { x1: X(v), x2: X(v), y1: y0, y2: y0 + 5, stroke: 'var(--line-2)' }, f.svg); el('text', { x: X(v), y: y0 + 18, 'text-anchor': v === 0 ? 'start' : 'middle', class: 'tick' }, f.svg, v === 0 ? '0' : big(v)); }
     if (qIn) { el('line', { x1: X(quota), x2: X(quota), y1: m.t, y2: y0, stroke: 'var(--ink)', 'stroke-width': 1.25 }, f.svg); el('text', { x: X(quota) - 5, y: y0 - 4, 'text-anchor': 'end', class: 'strong' }, f.svg, 'Quota'); }
     el('text', { x: x1, y: f.h - 4, 'text-anchor': 'end' }, f.svg, 'units a month' + (qIn ? '' : ' · quota ' + big(quota) + ' is off the scale'));
-    legend('leg-bars', [['box', 'var(--ink-2)', 'Reading the conversations'], ['box', 'var(--ink-2)', 'Finding them', 'opacity:.55'], ['box', 'var(--ink-2)', 'Counting candidates', 'opacity:.28']]);
+    legend('leg-bars', [['box', 'var(--ink-2)', 'Downloading the conversations'], ['box', 'var(--ink-2)', 'Finding them', 'opacity:.55'], ['box', 'var(--ink-2)', 'Size checks', 'opacity:.28'], ['box', 'var(--ink-2)', 'Downloaded, then discarded', 'opacity:.12']]);
   }
   function niceStep(raw) { const p = Math.pow(10, Math.floor(Math.log10(raw))), n = raw / p; return (n < 1.5 ? 1 : n < 3.5 ? 2 : n < 7.5 ? 5 : 10) * p; }
 
@@ -1416,7 +1416,7 @@ const SIM_SOURCE = "/* sim.js \u2014 the stochastic reply-tree model (GRT, 18 pa
 
   function drawCover(d) {
     const fams = FAMS.filter((k) => d.show[k]), n = fams.length;
-    const f = frame('ch-cover', f0h(), 'Probability that a conversation is collected, by its size and shape, for each strategy');
+    const f = frame('ch-cover', f0h(), 'Probability that a conversation is collected, by its size and shape, for each way of finding');
     function f0h() { const w = document.getElementById('ch-cover').clientWidth; return w < 620 ? n * 200 : 246; }
     const stacked = f.w < 620, gap = 40, m = { l: 40, r: 14, t: 40, b: 36 };
     const pw = stacked ? f.w - m.l - m.r : (f.w - m.l - m.r - gap * (n - 1)) / n, ph = stacked ? 200 - m.t - m.b : f.h - m.t - m.b;
@@ -1446,12 +1446,12 @@ const SIM_SOURCE = "/* sim.js \u2014 the stochastic reply-tree model (GRT, 18 pa
       hit.addEventListener('pointerleave', f.hideTip);
     });
     el('text', { x: m.l + (f.w - m.l - m.r) / 2, y: f.h - 2, 'text-anchor': 'middle' }, f.svg, 'Conversation size, in posts (log scale)');
-    legend('leg-cover', [['', 'var(--ink-2)', 'Root-driven: most replies answer the root'], ['', 'var(--quiet)', 'Quiet-root: long exchanges under a root with few direct replies']]);
+    legend('leg-cover', [['', 'var(--ink-2)', 'Root-driven: at least half of replies answer the root'], ['', 'var(--quiet)', 'Quiet-root: fewer than half do']]);
   }
 
   function drawShape(d) {
     const fams = FAMS.filter((k) => d.show[k]), rowH = 34;
-    const f = frame('ch-shape', fams.length * rowH + 44, 'Share of root-driven and quiet-root conversations found by each strategy');
+    const f = frame('ch-shape', fams.length * rowH + 44, 'Share of root-driven and quiet-root conversations found by each way of finding');
     const wide = f.w >= 620, m = { l: wide ? 220 : 8, r: wide ? 270 : 8, t: 20 }, x0 = m.l, x1 = f.w - m.r, X = lin(0, 1, x0, x1), yb = m.t + fams.length * rowH;
     el('text', { x: x0, y: 10 }, f.svg, 'Share of each shape that is found');
     legendDots(f, x1, 10);
@@ -1594,7 +1594,7 @@ const SIM_SOURCE = "/* sim.js \u2014 the stochastic reply-tree model (GRT, 18 pa
       const rp = line(ref, 'var(--ref)', 1.5, '5 4'), cp = line(cur, 'var(--ink)', 2.5, null);
       if (rp.length && ref(20) >= 1e-7) el('text', { x: X(20) - 8, y: Y(ref(20)) + 14, 'text-anchor': 'end' }, f.svg, 'Japan 2011 fit');
       for (const k of [10, 100, 1000]) { const v = cur(k); if (v >= 1e-7) { el('circle', { cx: X(k), cy: Y(v), r: 3.5, fill: 'var(--surface)', stroke: 'var(--ink)', 'stroke-width': 2 }, f.svg); } }
-      document.getElementById('sub-rootlaw').textContent = pct(1 - cur(2)) + ' of roots get exactly one reply. One root in ' + int(1 / cur(100)) + ' gets 100 or more, and one in ' + int(1 / Math.max(1e-12, cur(1000))) + ' gets 1,000 or more.';
+      document.getElementById('sub-rootlaw').textContent = (state.mix > 0 ? 'For the model alone; the US-archive blend is not drawn here. ' : '') + pct(1 - cur(2)) + ' of roots get exactly one direct reply. One root in ' + int(1 / cur(100)) + ' gets 100 or more, and one in ' + int(1 / Math.max(1e-12, cur(1000))) + ' gets 1,000 or more.';
       const cross = el('line', { y1: y1, y2: y0, stroke: 'var(--ink-3)', visibility: 'hidden' }, f.svg), ov = el('rect', { x: x0, y: y1, width: x1 - x0, height: y0 - y1, fill: 'transparent' }, f.svg);
       ov.addEventListener('pointermove', (ev) => { const b = f.svg.getBoundingClientRect(), px = (ev.clientX - b.left) * f.w / b.width, k = Math.max(1, Math.round(X.inv(px)));
         cross.setAttribute('x1', X(k)); cross.setAttribute('x2', X(k)); cross.setAttribute('visibility', 'visible');
@@ -1661,30 +1661,30 @@ const SIM_SOURCE = "/* sim.js \u2014 the stochastic reply-tree model (GRT, 18 pa
       ['Replies in conversations of 100+', pct(pop.tierS[j100] - pop.tierW[j100])],
       ['Replies in conversations of 1,000+', pct(pop.tierS[j1000] - pop.tierW[j1000])],
       ['Conversations of 100+ per million replies', big(1e6 * pop.tierW[j100])],
-      ['Of those, quiet-root', pop.tierW[j100] ? pct(pop.tierQuiet[j100] / pop.tierW[j100]) : '–'],
+      ['Share of those that are quiet-root', pop.tierW[j100] ? pct(pop.tierQuiet[j100] / pop.tierW[j100]) : '–'],
     ]);
     facts('facts-scale', [['Quota, as a share of reading every reply once', pct(d.budget)], ['Conversations of ' + sizeTxt + ' a month', at ? big(at.tierW * R) : 'none']]);
     // verdict
     const pill = document.getElementById('pill'), head = document.getElementById('headline'), rec = document.getElementById('recipe');
     const setPill = (cls, t) => { pill.className = 'pill ' + cls; pill.textContent = t; };
     if (d.status === 'empty') { setPill('short', 'Nothing this large'); head.textContent = 'This population has no conversations of ' + sizeTxt + '.'; rec.textContent = 'Lower the size, or choose a scenario with larger conversations.'; }
-    else if (!c) { setPill('short', 'No plan'); head.textContent = state.allowRoot || state.allowSample ? 'No allowed plan fits this quota.' : 'Allow at least one way of finding conversations.'; rec.textContent = ''; }
+    else if (!c) { setPill('short', 'No plan'); head.textContent = state.allowRoot || state.allowSample ? 'No plan meets the target or fits the quota.' : 'Allow at least one way of finding conversations.'; rec.textContent = state.allowRoot || state.allowSample ? 'Lower the share to find, or raise the size.' : ''; }
     else {
-      const name = famName(c);
-      if (d.status === 'ok') { setPill('ok', 'Fits the quota'); head.textContent = name + ' finds ' + pct(c.recall) + ' of conversations of ' + sizeTxt + ' for ' + big(c.cost * R) + ' units a month.'; }
-      else if (d.status === 'short') { setPill('short', 'Quota too small for the target'); head.textContent = 'This quota cannot find ' + need + ' of conversations of ' + sizeTxt + '. The most it finds, among the plans tried, is ' + pct(c.recall) + '.'; }
-      else if (d.status === 'ceiling') { setPill('short', 'Target out of reach'); head.textContent = 'No allowed plan finds ' + need + ' of conversations of ' + sizeTxt + ', at any quota. The most this quota finds is ' + pct(c.recall) + '.'; }
-      else { setPill('short', 'Over the quota'); head.textContent = 'The cheapest plan tried costs ' + big(c.cost * R) + ' units a month, ' + (c.cost / d.budget).toFixed(1) + ' times the quota.'; }
+      const name = famName(c), near = (x) => (Math.round(100 * x) === Math.round(100 * state.recall) ? (100 * x).toFixed(1) + '%' : pct(x));
+      if (d.status === 'ok') { setPill('ok', 'Fits the quota'); head.textContent = name + ' finds ' + pct(c.recall) + ' of conversations of ' + sizeTxt + ' for ' + big(c.cost * R) + ' units a month, ' + pct(c.cost / d.budget) + ' of the quota.'; }
+      else if (d.status === 'short') { setPill('short', 'Below target'); head.textContent = 'No plan tried finds ' + need + ' of conversations of ' + sizeTxt + ' within the quota. The best finds ' + near(c.recall) + '.'; }
+      else if (d.status === 'ceiling') { setPill('short', 'Target out of reach'); head.textContent = 'No allowed plan finds ' + need + ' of conversations of ' + sizeTxt + ', at any quota. The best within this quota finds ' + near(c.recall) + '.'; }
+      else { setPill('short', 'Over the quota'); head.textContent = 'The cheapest plan that finds ' + need + ' costs ' + big(c.cost * R) + ' units a month, ' + (c.cost / d.budget).toFixed(1) + ' times the quota, and no plan fits within it.'; }
       rec.textContent = recipe(c, d.cut) + (d.status === 'short' ? ' Finding ' + need + ' would cost ' + big(at.atFloor.cost * R) + ' units a month.' : '')
         + (d.status === 'ceiling' ? ' The limit is what the allowed ways of finding can see, not the quota.' : '')
-        + (d.status !== 'ok' && d.reach ? ' With ' + need + ' found, this quota reaches conversations of about ' + int(d.reach.size) + '+ posts.' : '');
+        + (d.status !== 'ok' && d.reach ? ' With this quota you can find ' + need + ' of conversations only from about ' + int(d.reach.size) + ' posts up.' : '');
     }
     const k = [];
     if (c) {
       const returned = (c.finding + c.wasted + c.reading) * R;
-      k.push(['Conversations collected a month', big(c.found * R), pct(c.recall) + ' of the ' + big(at.tierW * R) + ' that reach ' + int(d.cut) + ' posts']);
-      k.push(['Units charged a month', big(c.cost * R), pct(c.cost / d.budget) + ' of the quota; about ' + big(returned) + ' posts returned']);
-      k.push(['Spent on finding, not reading', pct(1 - c.reading / c.cost), big((c.cost - c.reading) * R) + ' units on search, stream and counts']);
+      k.push(['Conversations collected a month', big(c.found * R), pct(c.recall) + ' of the ' + big(at.tierW * R) + ' with ' + int(d.cut) + '+ posts, holding ' + pct(c.posts / at.tierPosts) + ' of their posts']);
+      k.push(['Units spent a month', big(c.cost * R), pct(c.cost / d.budget) + ' of the quota; about ' + big(returned) + ' posts returned']);
+      k.push(['Spent on searching and size checks', pct(1 - c.reading / c.cost), big((c.cost - c.reading) * R) + ' units on root search, the reply sample' + (c.wasted > 0 ? ', counts and discarded downloads' : ' and counts')]);
       k.push(['Quiet-root conversations found', pct(c.cover.foundQuiet), 'against ' + pct(c.cover.foundDriven) + ' of root-driven ones']);
     }
     document.getElementById('kpis').innerHTML = k.map(([a, b, s]) => '<div class="kpi"><div class="k">' + a + '</div><div class="v">' + b + '</div><div class="s">' + s + '</div></div>').join('');
@@ -1693,7 +1693,7 @@ const SIM_SOURCE = "/* sim.js \u2014 the stochastic reply-tree model (GRT, 18 pa
       : '<b>' + (pending ? 'Simulating' : 'Simulated') + '</b> · ' + big(tableInfo.trees) + ' conversations' + (pending ? ' · pass ' + tableInfo.round + ' of ' + tableInfo.rounds : '')
         + (tableInfo.excess > 1e-9 || tableInfo.capped > 1e-9 ? ' · the largest conversations exceed the simulator’s limit and are understated' : '');
     document.getElementById('foot-build').textContent = CONFIG.version + '. Quota and monthly reply volume are placeholders until the contract and the 2024 data say otherwise.';
-    document.getElementById('sub-pop').textContent = 'How concentrated replies are. The grey lines are the two reference data sets; the black line is your settings.';
+    document.getElementById('sub-pop').textContent = 'Share of all replies that sit in conversations of at least each size. Grey: Japan 2011 and the US archives. Black: your settings.';
     const clear = (ids) => ids.forEach((id) => { const h = document.getElementById(id); h.querySelectorAll('svg').forEach((x) => x.remove()); });
     if (!at || !c) {
       clear(['ch-logic', 'ch-frontier', 'ch-bars', 'ch-reach', 'ch-cover', 'ch-shape']);
@@ -1702,13 +1702,13 @@ const SIM_SOURCE = "/* sim.js \u2014 the stochastic reply-tree model (GRT, 18 pa
       drawPop(d); drawModel(); scheduleRange(); return;
     }
     // captions
-    document.getElementById('sub-frontier').textContent = 'Each line is the most a strategy finds at a given monthly charge, among the plans tried, for conversations of ' + sizeTxt + '. Left of the quota line is affordable.';
-    document.getElementById('sub-bars').textContent = 'What each strategy charges at its cheapest setting that finds ' + need + ', or at its best within the quota. Solid is reading the conversations; lighter is finding and counting them. Root search is shown at half the size if finding ' + need + ' would cost over twice the reading.';
-    document.getElementById('sub-reach').textContent = d.reach ? 'With ' + need + ' found, this quota reaches conversations of about ' + int(d.reach.size) + '+ posts, the smallest size tried that fits. Below the quota line is affordable.'
-      : 'With ' + need + ' found, this quota reaches no size tried. Below the quota line is affordable.';
-    document.getElementById('sub-cover').textContent = 'The chance that a conversation of a given size is collected, by shape. Where the two lines part, the data set is biased toward one shape.';
+    document.getElementById('sub-frontier').textContent = 'Each line shows the most a way of finding can collect at each level of spending, among the plans tried, for conversations of ' + sizeTxt + '. Spending left of the quota line fits.';
+    document.getElementById('sub-bars').textContent = 'Each way of finding at its cheapest plan that finds ' + need + ', or at its best within the quota. The darkest part is downloading the conversations; lighter parts are finding them and checking sizes. Root search is shown at half the size if finding ' + need + ' would cost over twice the downloading.';
+    document.getElementById('sub-reach').textContent = d.reach ? 'To find ' + need + ' within this quota, collect conversations of about ' + int(d.reach.size) + '+ posts or larger. Points below the quota line fit.'
+      : 'No size tried lets this quota find ' + need + '. Points below the quota line fit.';
+    document.getElementById('sub-cover').textContent = 'The chance that a conversation of a given size is collected, for root-driven and quiet-root conversations. A gap between the lines means the collection over-represents one kind.';
     const qs = pop.tierW[d.cutBin] ? pop.tierQuiet[d.cutBin] / pop.tierW[d.cutBin] : 0;
-    document.getElementById('note-cover').textContent = 'Under these assumptions ' + pct(qs) + ' of conversations of ' + sizeTxt + ' are quiet-root. Root search sees a conversation only when its root has enough replies. A reply sample is more likely to catch a conversation the larger it is, whatever its shape.';
+    document.getElementById('note-cover').textContent = 'Under these assumptions ' + pct(qs) + ' of conversations of ' + sizeTxt + ' are quiet-root. Root search finds a conversation only if its root has enough direct replies. A reply sample flags larger conversations more often, whatever their shape.';
     drawLogic(d); drawFrontier(d); drawBars(d); drawReach(d); drawCover(d); drawShape(d); drawPop(d); drawModel();
     scheduleRange();
   }
@@ -1727,11 +1727,11 @@ const SIM_SOURCE = "/* sim.js \u2014 the stochastic reply-tree model (GRT, 18 pa
       const why = { short: 'the most within the quota', ceiling: need + ' is out of reach', over: 'over the quota' };
       host.innerHTML = '<table class="range"><thead><tr><th></th>' + names.map((n) => '<th scope="col" class="' + (n === act ? 'on' : '') + '"><button type="button" data-sc="' + n + '">' + CONFIG.scenarios[n].label + '</button></th>').join('') + '</tr></thead><tbody>'
         + rowHtml('Replies in conversations of 100+', (a) => '<span class="num">' + pct(a.share100) + '</span>')
-        + rowHtml('Large conversations that are quiet-root', (a) => a.quietShare == null ? none(a) : '<span class="num">' + pct(a.quietShare) + '</span>')
-        + rowHtml('Plan', (a) => a.chosen ? '<span class="chip" style="background:' + FAM[a.chosen.family].color + '"></span>' + famName(a.chosen) + (a.status !== 'ok' ? '<div class="dim">' + why[a.status] + '</div>' : '') : none(a))
-        + rowHtml('Units charged a month', (a) => a.chosen ? bar(a) : none(a))
+        + rowHtml('Quiet-root share of conversations of ' + int(state.cut) + '+ posts', (a) => a.quietShare == null ? none(a) : '<span class="num">' + pct(a.quietShare) + '</span>')
+        + rowHtml('Plan shown', (a) => a.chosen ? '<span class="chip" style="background:' + FAM[a.chosen.family].color + '"></span>' + famName(a.chosen) + (a.status !== 'ok' ? '<div class="dim">' + why[a.status] + '</div>' : '') : none(a))
+        + rowHtml('Units spent a month', (a) => a.chosen ? bar(a) : none(a))
         + rowHtml('Share found', (a) => a.chosen ? '<span class="num">' + pct(a.chosen.recall) + '</span> <span class="dim">quiet-root ' + pct(a.quiet) + '</span>' : none(a))
-        + rowHtml('Spent on finding, not reading', (a) => a.chosen ? '<span class="num">' + pct(1 - a.chosen.reading / a.chosen.cost) + '</span>' : none(a))
+        + rowHtml('Spent on searching and size checks', (a) => a.chosen ? '<span class="num">' + pct(1 - a.chosen.reading / a.chosen.cost) + '</span>' : none(a))
         + rowHtml('Root search alone, at half the size', (a) => a.rootOnly ? '<span class="num">' + pct(a.rootOnly.recall) + '</span> <span class="dim">at ' + int(a.rootOnly.T) + '+ replies, ' + big(a.rootOnly.cost * R) + ' units</span>' : none(a))
         + rowHtml('Smallest size the quota reaches', (a) => a.reach ? '<span class="num">about ' + int(a.reach.size) + '+</span>' : a.status === 'empty' ? none(a) : '<span class="dim">none tried</span>')
         + '</tbody></table>';
@@ -1751,7 +1751,7 @@ const SIM_SOURCE = "/* sim.js \u2014 the stochastic reply-tree model (GRT, 18 pa
       cols[name] = a; draw(); setTimeout(step, 0);
     };
     setTimeout(step, 0);
-    document.getElementById('sub-range').textContent = 'The same quota, prices and research choices under each scenario, for conversations of ' + int(state.cut) + '+ posts with ' + need + ' to be found. Select a column to load it.';
+    document.getElementById('sub-range').textContent = 'Your quota, prices and choices, applied to each scenario, for conversations of ' + int(state.cut) + '+ posts with ' + need + ' to be found. Click a column to load it.';
   }
 
   /* ====================================================================== wiring */

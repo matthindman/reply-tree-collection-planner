@@ -2,7 +2,7 @@
   <header class="top">
     <div>
       <h1>Reply Tree Collection Planner</h1>
-      <p>Set your assumptions on the left. The right side shows the plan, what it costs and which conversations it misses, and updates as you go.</p>
+      <p>Set your assumptions about Japanese-language X, the API contract and what you want to collect. The results update as you move a control: the plan, what it costs, and which conversations it misses.</p>
     </div>
     <div class="top-actions">
       <span class="status" id="status"></span>
@@ -35,7 +35,7 @@
       </section>
 
       <section class="card">
-        <h3>What each strategy buys</h3>
+        <h3>What each way of finding buys</h3>
         <p class="sub" id="sub-frontier"></p>
         <div class="legend" id="leg-frontier"></div>
         <div class="chart" id="ch-frontier"></div>
@@ -73,11 +73,11 @@
 
       <section class="card">
         <h3>The model behind the conversations</h3>
-        <p class="sub">The planner draws every conversation from one model with three parts. The charts below change as you move the model controls on the left.</p>
+        <p class="sub">The planner generates every conversation at random from one model with three parts. The charts below change as you move the model controls on the left.</p>
         <div class="model-text">
-          <div><h4>A root draws its direct replies</h4><p>Most roots get one reply. A small popular group gets tens, hundreds or thousands. <em>Roots in the popular group</em> sets how many roots are in that group; <em>Reach of the most popular posts</em> sets how large they get.</p></div>
-          <div><h4>Each reply is answered, or not</h4><p>A reply that is answered usually gets exactly one reply, which is how a back-and-forth exchange grows. The chance is lower under a popular root and varies between conversations. The two <em>get an answer</em> controls and <em>Difference between conversations</em> set it.</p></div>
-          <div><h4>Now and then an exchange splits</h4><p>The last reply in an exchange sometimes draws several replies at once, and each starts a new exchange. <em>Side threads</em> sets how often.</p></div>
+          <div><h4>An original post (root) draws its direct replies</h4><p>Most roots that get any reply get exactly one. A small popular group gets tens, hundreds or thousands. <em>Roots in the popular group</em> sets how many roots are in that group; <em>Reach of the most popular posts</em> sets how large they get.</p></div>
+          <div><h4>Each reply is answered, or not</h4><p>A reply that gets an answer usually gets exactly one, and chains of single answers make a back-and-forth exchange. The chance is lower under a popular root and varies between conversations. The two <em>get an answer</em> controls and <em>Difference between conversations</em> set it.</p></div>
+          <div><h4>Now and then an exchange splits</h4><p>When an exchange stops, its last reply sometimes gets several replies at once. Each starts a new exchange. <em>Side threads</em> sets how often.</p></div>
         </div>
         <h4 class="fig">The equations</h4>
         <ol class="eqs">
@@ -115,9 +115,9 @@
           <li>Conversations are drawn from the reply-tree model described above. The page opens on a working guess for Japanese X today. It is not a measurement: no measurement of Japanese reply trees after 2011 was found.</li>
           <li>Charges are in units. One unit is the charge for one post on X's public price list; counts and other charges are converted at the prices on the left. Whether they draw on your quota depends on the contract. Nothing here has been tested on a paid account.</li>
           <li>Monthly volume and conversation shape rest on different counts. The default volume is an estimate of Japanese-written replies; the shapes describe conversations under Japanese roots.</li>
-          <li>The plan shown is the best of those tried: root search, a reply sample, or both; with or without a count; keeping all candidates or a random share. Sizes and thresholds are tried on a grid, so &ldquo;smallest size&rdquo; means the smallest size tried.</li>
+          <li>The plan shown is the best of those tried: root search, a reply sample, or both; with or without a size check; keeping every flagged conversation or a random share. Every plan downloads what it keeps in full, or up to the read limit. Skipping the very largest conversations would collect more conversations and miss the largest ones; no plan here does that. Sizes and thresholds are tried on a grid, so &ldquo;smallest size&rdquo; means the smallest size tried.</li>
           <li>The model is static. A conversation is judged on its final size; waiting times, deletions and replies not tagged as Japanese are not modelled.</li>
-          <li>Scenarios are what-if cases, not probability bounds. Low end and High end change only the share of popular roots, which also changes how many conversations are quiet-root.</li>
+          <li>The best guess and its variants come from two desk reviews (GPT Pro and Claude Opus). In the second round each was given the first round&rsquo;s targets, so their agreement is partly built in. Scenarios are what-if cases, not probability bounds. Low end and High end change only the share of popular roots, which also changes how many conversations are quiet-root.</li>
           <li>Moving a model control starts a fresh simulation, whose results carry a few percent of sampling noise. The scenario buttons load larger, steadier runs.</li>
           <li id="foot-build"></li>
         </ul>
