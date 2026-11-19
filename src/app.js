@@ -6,7 +6,7 @@
 
   /* ====================================================================== CONFIG */
   const CONFIG = {
-    version: 'Draft 6 · 19 November 2026',
+    version: 'Draft 7 · 19 November 2026',
     // Fitted parameters of the reply-tree model (general_model/fits). Japan 2011 is the default.
     models: {
       // Best guess for Japanese X today: a full parameter set calibrated to the prior assessments (data/calibrate_today.js).
@@ -380,6 +380,57 @@
   const row = (color, name, val) => '<div class="row"><span>' + (color ? '<i style="background:' + color + '"></i>' : '') + name + '</span><span class="num">' + val + '</span></div>';
 
   /* ====================================================================== charts */
+  /* The chosen plan as a flow: two ways of finding, one count, one fetch, with monthly numbers. */
+  function drawLogic(d) {
+    const c = d.chosen, host = document.getElementById('ch-logic');
+    if (!c) { host.querySelectorAll('svg').forEach((x) => x.remove()); return; }
+    const R = state.replies, free = state.stream !== 'none', col = FAM[c.family].color;
+    const rootPart = c.T ? COST.rootPolicy(d.pop, d.pr, d.cutBin, c.T, true) : null;
+    const rootCand = rootPart ? rootPart.cand : 0, sampleCand = Math.max(0, c.cand - rootCand);
+    const streamCost = c.p && !free ? d.pr.streamPost * d.pr.traffic * c.p : 0, rootCost = Math.max(0, c.finding - streamCost);
+    const unit = state.minReplies === 'all' ? 'replies below' : 'direct replies';
+    const boxes = {
+      root: c.T ? { on: true, color: 'var(--root)', title: 'Root search', lines: ['roots with ' + int(c.T) + '+ ' + unit, big(rootCand * R) + ' candidates a month', 'costs ' + big(rootCost * R) + ' posts'] }
+                : { on: false, title: 'Root search', lines: ['not used in this plan'] },
+      sample: c.p ? { on: true, color: 'var(--sample)', title: free ? (c.p >= 1 ? 'Full reply stream' : 'Free ' + pShow(c.p) + ' reply stream') : pShow(c.p) + ' reply sample',
+                      lines: ['candidate at ' + ord(c.h) + ' sampled reply', big(sampleCand * R) + ' candidates a month', free ? 'outside the quota' : 'costs ' + big(streamCost * R) + ' posts'] }
+                  : { on: false, title: 'Reply sample', lines: ['not used in this plan'] },
+      count: c.count ? { on: true, title: 'Count each candidate once', lines: [big(c.cand * R) + ' counts at ' + state.countPrice + (state.countPrice === 1 ? ' unit' : ' units'), big(Math.max(0, c.cand - c.found) * R) + ' too small, dropped', 'costs ' + big(c.counting * R) + ' posts'] }
+                     : { on: true, title: 'No count', lines: ['every candidate is fetched', big(Math.max(0, c.cand - c.found) * R) + ' turn out too small', 'costs nothing'] },
+      fetch: { on: true, title: 'Fetch the conversation', lines: [big(c.found * R) + ' reach ' + int(d.cut) + ' posts', state.cap ? 'first ' + int(state.cap) + ' posts of each' : c.wasted > 0 ? big(c.wasted * R) + ' posts discarded' : 'each post read once', 'costs ' + big((c.reading + c.wasted) * R) + ' posts'] },
+      done: { on: true, color: col, fill: true, title: 'Collected', lines: [big(c.found * R) + ' conversations a month', pct(c.recall) + ' of the ' + big(d.at.tierW * R) + ' of ' + int(d.cut) + '+ posts', big(c.cost * R) + ' posts, ' + pct(c.cost / d.budget) + ' of quota'] },
+    };
+    const wide = host.clientWidth >= 760, BH = 90, uid = 'lg' + (drawLogic.n = (drawLogic.n || 0) + 1);
+    const f = frame('ch-logic', wide ? 2 * BH + 16 + 20 : 5 * BH + 4 * 26 + 12, 'The chosen plan as a flow: finding, counting, fetching and what is collected');
+    const defs = el('defs', {}, f.svg), mk = el('marker', { id: uid, viewBox: '0 0 10 10', refX: 9, refY: 5, markerWidth: 7, markerHeight: 7, orient: 'auto-start-reverse' }, defs);
+    el('path', { d: 'M0 0L10 5L0 10z', fill: 'var(--ink-3)' }, mk);
+    const box = (b, x, y, w) => {
+      const g = el('g', { opacity: b.on ? 1 : 0.5 }, f.svg);
+      el('rect', { x, y, width: w, height: BH, rx: 9, fill: b.fill ? b.color : 'var(--surface)', 'fill-opacity': b.fill ? 0.12 : 1, stroke: b.on ? (b.color || 'var(--line-2)') : 'var(--line-2)', 'stroke-width': b.color && b.on ? 1.75 : 1.25, 'stroke-dasharray': b.on ? null : '4 4' }, g);
+      el('text', { x: x + 14, y: y + 24, class: 'strong', style: 'font-size:13px' }, g, b.title);
+      b.lines.forEach((t, i) => el('text', { x: x + 14, y: y + 42 + 16 * i, style: i === b.lines.length - 1 && b.lines.length === 3 ? 'fill:var(--ink)' : '' }, g, t));
+    };
+    const arrow = (dd) => el('path', { d: dd, fill: 'none', stroke: 'var(--ink-3)', 'stroke-width': 1.25, 'marker-end': 'url(#' + uid + ')' }, f.svg);
+    if (wide) {
+      const gap = 38, x0 = 2, w = f.w - 4, wf = Math.round((w - 3 * gap) * 0.29), wo = (w - 3 * gap - wf) / 3;
+      const yTop = 10, yMid = yTop + (2 * BH + 16 - BH) / 2, xs = [x0, x0 + wf + gap, x0 + wf + gap + wo + gap, x0 + wf + gap + 2 * (wo + gap)];
+      const cy = yMid + BH / 2, mx = xs[1] - gap / 2;
+      if (boxes.root.on) arrow('M' + (xs[0] + wf) + ' ' + (yTop + BH / 2) + 'H' + mx + 'V' + (cy - (boxes.sample.on ? 10 : 0)) + 'H' + xs[1]);
+      if (boxes.sample.on) arrow('M' + (xs[0] + wf) + ' ' + (yTop + BH + 16 + BH / 2) + 'H' + mx + 'V' + (cy + (boxes.root.on ? 10 : 0)) + 'H' + xs[1]);
+      arrow('M' + (xs[1] + wo) + ' ' + cy + 'H' + xs[2]); arrow('M' + (xs[2] + wo) + ' ' + cy + 'H' + xs[3]);
+      box(boxes.root, xs[0], yTop, wf); box(boxes.sample, xs[0], yTop + BH + 16, wf);
+      box(boxes.count, xs[1], yMid, wo); box(boxes.fetch, xs[2], yMid, wo); box(boxes.done, xs[3], yMid, wo);
+      el('text', { x: xs[0] + 2, y: yTop + 2 * BH + 16 + 16, class: 'tick' }, f.svg, 'FIND');
+      el('text', { x: xs[1] + 2, y: yMid + BH + 16, class: 'tick' }, f.svg, 'CHECK THE SIZE'); el('text', { x: xs[2] + 2, y: yMid + BH + 16, class: 'tick' }, f.svg, 'READ'); el('text', { x: xs[3] + 2, y: yMid + BH + 16, class: 'tick' }, f.svg, 'RESULT');
+    } else {
+      const w = f.w - 4, x = 2, order = ['root', 'sample', 'count', 'fetch', 'done'];
+      order.forEach((k, i) => { const y = 4 + i * (BH + 26); box(boxes[k], x, y, w); if (i === 0) el('text', { x: x + w / 2, y: y + BH + 18, 'text-anchor': 'middle', class: 'strong' }, f.svg, 'and'); else if (i < order.length - 1) arrow('M' + (x + w / 2) + ' ' + (y + BH + 3) + 'V' + (y + BH + 23)); });
+    }
+    const q = c.cover ? c.cover.foundQuiet : null;
+    document.getElementById('sub-logic').textContent = 'The plan in the headline, step by step, with monthly numbers under the current settings. A way of finding that the plan does not use is shown dashed.'
+      + (q != null ? ' It misses ' + big(Math.max(0, d.at.tierW - c.found) * R) + ' conversations of ' + int(d.cut) + '+ posts a month, and finds ' + pct(q) + ' of the quiet-root ones.' : '');
+  }
+
   function drawFrontier(d) {
     const R = state.replies, f = frame('ch-frontier', 330, 'Share of target conversations found against posts read each month, by strategy');
     const m = { l: 46, r: 18, t: 22, b: 42 }, x0 = m.l, x1 = f.w - m.r, y0 = f.h - m.b, y1 = m.t;
@@ -640,7 +691,7 @@
     st.innerHTML = tableInfo.kind === 'ref' ? '<b>' + (tableInfo.name === 'japan2011' ? 'Japan 2011 reference' : 'Precomputed scenario') + '</b> · ' + (tableInfo.name === 'japan2011' ? '200M' : big(SCENARIO_TABLES[tableInfo.name].trees)) + ' simulated conversations'
       : '<b>' + (pending ? 'Simulating' : 'Simulated') + '</b> · ' + big(tableInfo.trees) + ' conversations' + (pending ? ' · pass ' + tableInfo.round + ' of ' + tableInfo.rounds : '') + (tableInfo.excess > 1e-7 ? ' · some conversations exceed 3M posts' : '');
     document.getElementById('foot-build').textContent = CONFIG.version + '. Quota and monthly reply volume are placeholders until the contract and the 2024 data say otherwise.';
-    drawFrontier(d); drawBars(d); drawReach(d); drawCover(d); drawShape(d); drawPop(d);
+    drawLogic(d); drawFrontier(d); drawBars(d); drawReach(d); drawCover(d); drawShape(d); drawPop(d);
     scheduleRange();
   }
 
