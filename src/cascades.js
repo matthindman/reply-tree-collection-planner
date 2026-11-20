@@ -37,7 +37,7 @@
       { key: 'month', kind: 'seg', label: 'A month like, in 2026', options: [['June', 'Jun'], ['July', 'Jul'], ['August', 'Aug'], ['September', 'Sep']], hint: 'Sizes were measured for September, the largest of the four. The others scale it by their total.' },
       { key: 'change', kind: 'range', label: 'Change in volume since then', min: -0.2, max: 0.5, step: 0.01, fmt: (v) => (v > 0 ? '+' : '') + Math.round(100 * v) + '%', hint: 'Volumes rose about 8% a month from July to September. A 31-day month adds 3%.' },
       { key: 'quoteRooted', kind: 'check', label: 'Count cascades rooted at a quote', hint: 'Measured, as lower bounds: a quote late in its parent’s week was followed for less than seven days.' },
-      { key: 'replyLed', kind: 'check', label: 'Count reply-led cascades', hint: 'Cascades whose retweets hang from the replies, not the root: about a quarter of posts in September, from 11% to 35% by day. Their timing suggests automation; this is not confirmed. Unticked, they are returned by search but not collected.' },
+      { key: 'replyLed', kind: 'check', label: 'Count reply-led cascades', hint: 'Cascades whose retweets hang from the replies, not the root: about a quarter of posts in September, from 11% to 35% by day. A sample checked on X shows nearly all are automated advertising: Chinese-language replies selling sexual services, retweeted by automated accounts. Unticked, they are returned by search but not collected.' },
       { kind: 'facts', id: 'c-facts' },
     ] },
     { title: 'What to collect', controls: [
