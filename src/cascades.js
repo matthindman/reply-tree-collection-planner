@@ -30,7 +30,7 @@
     { title: 'The contract', controls: [
       { key: 'cap', kind: 'log', label: 'Monthly cap, in units', min: 1e7, max: 1e9, fmt: big, hint: 'One unit is the charge for one post returned.' },
       { key: 'reserve', kind: 'range', label: 'Kept in reserve', min: 0, max: 3e7, step: 1e6, fmt: (v) => (v ? big(v) : 'none'), hint: 'For daily spikes, the largest cascades and lookups.' },
-      { key: 'window', kind: 'seg', label: 'Window after the root is posted', options: [[3, '3 days'], [7, '7 days']] },
+      { key: 'window', kind: 'seg', label: 'Window after the root is posted', options: [[1, '1 day'], [2, '2 days'], [3, '3 days'], [7, '7 days']], hint: 'Posts after the window are not collected. One and two days are estimates: no post totals were measured for them.' },
     ] },
     { title: 'Volumes', controls: [
       { key: 'month', kind: 'seg', label: 'A month like, in 2026', options: [['June', 'Jun'], ['July', 'Jul'], ['August', 'Aug'], ['September', 'Sep']], hint: 'Sizes were measured for September, the largest of the four. The others scale it by their total.' },
@@ -50,7 +50,7 @@
       { key: 'rtRate', kind: 'range', label: 'Random share of retweets bought', min: 0.01, max: 0.3, step: 0.01, fmt: (v) => Math.round(100 * v) + '%', disabled: () => st.rtMode !== 'sample' },
       { key: 'census', kind: 'pick', label: 'Root and counts, for cascades of at least', choices: [100, 200, 300, 500, 1000], fmt: sz,
         hint: 'Search filters on a root’s own retweet or reply count. How well that matches a cascade’s size has not been measured.' },
-      { key: 'passes', kind: 'range', label: 'Search passes for each day of roots', min: 1, max: 3, step: 1, fmt: (v) => (v === 1 ? 'once' : v === 2 ? 'twice' : '3 times'), hint: 'The last pass is at the end of the window, earlier ones at 24 and 48 hours. Each pass returns every root again.' },
+      { key: 'passes', kind: 'range', label: 'Search passes for each day of roots', min: 1, max: 3, step: 1, fmt: (v) => { const n = Math.min(v, st.window); return n === 1 ? 'once' : n === 2 ? 'twice' : '3 times'; }, hint: 'The last pass is at the end of the window, earlier ones at 24 and 48 hours, so a one-day window has one pass. Each pass returns every root again.' },
     ] },
   ];
 
@@ -97,7 +97,8 @@
   function changed() { derive(); refreshers.forEach((f) => f()); if (!raf) raf = requestAnimationFrame(() => { raf = 0; render(); }); }
 
   /* ====================================================================== the plan */
-  const opts = (over) => Object.assign({ full: st.full, rq: st.rq, census: st.census, passes: st.passes, rt: st.rt, qt: st.qt, rtMode: st.rtMode, rtN: st.rtN, rtRate: st.rtRate, stream: st.stream }, over || {});
+  const nPass = () => Math.min(st.passes, st.window);   // a pass a day at most
+  const opts = (over) => Object.assign({ full: st.full, rq: st.rq, census: st.census, passes: nPass(), rt: st.rt, qt: st.qt, rtMode: st.rtMode, rtN: st.rtN, rtRate: st.rtRate, stream: st.stream }, over || {});
   const budget = () => Math.max(0, st.cap - st.reserve);
   const roundUp = (v) => { const p = v < 1000 ? 10 : v < 10000 ? 50 : v < 100000 ? 500 : 5000; return Math.ceil(v / p - 1e-9) * p; };
   const top2 = () => (st.full === Infinity ? 1e6 : st.full);
@@ -106,7 +107,7 @@
     if (st.rqAuto) { const e = CASCADE.lowest(pop, opts(), 'rq', budget(), st.census, top2()); st.rq = e == null ? top2() : Math.min(top2(), roundUp(e)); }
     else st.rq = Math.max(st.rq, st.census);   // a cascade in the second tier has to be found
   }
-  const passAges = () => { const end = 24 * st.window; return st.passes === 1 ? [end] : st.passes === 2 ? [24, end] : [24, 48, end]; };
+  const passAges = () => { const end = 24 * st.window, n = nPass(); return n === 1 ? [end] : n === 2 ? [24, end] : [24, 48, end]; };
   const ageTxt = (h) => (h % 24 === 0 && h > 72 ? h / 24 + ' days' : h + ' hours');
   const agesTxt = () => { const a = passAges(); return a.every((h) => h <= 72) ? list(a.map(String)) + ' hours' : list(a.map(ageTxt)); };
   const list = (a) => (a.length < 2 ? a.join('') : a.slice(0, -1).join(', ') + ' and ' + a[a.length - 1]);
@@ -125,7 +126,7 @@
     const host = document.getElementById('c-flow'), wide = host.clientWidth >= 820, BH = 90, uid = 'cf' + (drawFlow.n = (drawFlow.n || 0) + 1);
     const col = fits ? 'var(--ok)' : 'var(--over)', got = r.posts ? r.downloaded / r.posts : 0;
     const boxes = [
-      { title: 'Search by counts', color: TIER.census, lines: [st.passes === 1 ? 'one pass, at ' + ageTxt(passAges()[0]) : 'at ' + (st.window === 3 ? agesTxt() : passAges().map((h) => (h > 72 ? h / 24 + ' d' : h + ' h')).join(', ')), big(r.roots) + ' roots of ' + int(r.census) + '+', 'costs ' + big(r.finding) + ' units'] },
+      { title: 'Search by counts', color: TIER.census, lines: [nPass() === 1 ? 'one pass, at ' + ageTxt(passAges()[0]) : 'at ' + (st.window <= 3 ? agesTxt() : passAges().map((h) => (h > 72 ? h / 24 + ' d' : h + ' h')).join(', ')), big(r.roots) + ' roots of ' + int(r.census) + '+', 'costs ' + big(r.finding) + ' units'] },
       { title: 'Replies first', lines: ['each reply carries its counts', big(r.replies) + ' replies', 'costs ' + big(r.replies) + ' units'] },
       hasT1 ? { title: 'In full, ' + int(st.full) + '+', color: TIER.full, lines: ['every quote and retweet', big(r.n1) + ' cascades', 'costs ' + big(r.t1.quotes + r.t1.retweets) + ' units'] }
             : { title: 'No cascade in full', dashed: true, lines: ['no size chosen', 'for every post', 'costs nothing'] },
@@ -297,6 +298,7 @@
       fix = e != null ? ' Replies and quotes fit from about ' + int(roundUp(e)) + '+ posts.' : g != null ? ' Every post alone fits only from about ' + int(roundUp(g)) + '+ posts.' : '';
     }
     if (hasT2 && r.rq < 1000) fix += ' Sizes below 1,000 posts are rough.';
+    if (pop.windowRough) fix += ' A ' + (st.window === 1 ? 'one' : 'two') + '-day window collects about ' + pct(pop.shrink) + ' of the posts these cascades have in seven days, and ' + pct(D.window[st.window].keep) + ' of the seven-day cascades of 10,000+ reach 10,000 in it. ' + (st.window === 1 ? 'The first figure is an estimate.' : 'Both figures are estimates.');
     document.getElementById('c-recipe').textContent = recipe(r, hasT1, hasT2) + fix;
     const more = (q) => (q >= 0.5 ? '; about ' + big(+q.toPrecision(2)) + ' more rooted at a quote' : '');
     const k = [
@@ -312,7 +314,7 @@
     document.getElementById('c-sub-fit').textContent = 'Units a month against the smallest cascade collected. Dots are at the measured sizes. With no search passes counted, every post fits the cap from about ' + (fitAll ? int(roundUp(fitAll)) : '?') + '+ posts, and replies and quotes from about ' + (fitRQ ? int(roundUp(fitRQ)) + '+' + (fitRQ < 1000 ? ' (rough)' : '') : '?') + '. The black line is your plan as its second tier reaches lower.';
     document.getElementById('c-sub-grow').textContent = 'Median share of a cascade’s seven-day size reached by each hour. The median cascade has about 99% of it at 48 hours. Of the cascades that end at 10,000+ posts, ' + pct(D.passed10k[24]) + ' have passed 10,000 in total size by 24 hours and ' + pct(D.passed10k[72]) + ' by 72. A root’s own counts pass later than the total; how much later has not been measured.';
     document.getElementById('c-sub-find').textContent = 'The 1% stream notices a cascade only if one of its posts is sampled: ' + pct(CASCADE.binomSf(1, 100, st.stream)) + ' of the time at 100 posts. Search filters on one post’s own retweet or reply count, so the dashed line is the most it can find: a cascade whose size is spread over many replies, or sits on quotes, can be missed. The share missed has not been measured.';
-    document.getElementById('c-foot-build').textContent = 'Cascade view, third version · 20 November 2026. Sizes were counted by Prof. Toyoda’s group on the full Japanese stream for September 2026: ' + int(D.N[0]) + ' cascades of 1,000+ posts holding ' + big(D.P[0]) + ' posts, ' + int(D.N[2]) + ' of 10,000+ holding ' + big(D.P[2]) + '.';
+    document.getElementById('c-foot-build').textContent = 'Cascade view, fourth version · 20 November 2026. Sizes were counted by Prof. Toyoda’s group on the full Japanese stream for September 2026: ' + int(D.N[0]) + ' cascades of 1,000+ posts holding ' + big(D.P[0]) + ' posts, ' + int(D.N[2]) + ' of 10,000+ holding ' + big(D.P[2]) + '.';
     drawFlow(r, hasT1, hasT2, fits); drawCap(r, fits); drawTiers(r, hasT1, hasT2); drawFit(r, hasT2); drawGrow(); drawFind();
   }
 

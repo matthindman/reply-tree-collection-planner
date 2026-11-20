@@ -7,8 +7,11 @@
    DATA holds counts for September 2026 from the full Japanese stream (seven-day window). The model is one
    size distribution: between two measured sizes the count of cascades is a smooth curve on log-log axes,
    bent so that the posts it implies equal the posts measured in that band. Posts are then summed from the
-   counts, so for seven days the two agree. The three-day counts and posts are each scaled by their own
-   measured ratio (0.9573 and 0.9568). No cascade is taken to pass 100 million posts. Above 20,000 posts the counts follow a power law set by the mean size
+   counts, so the two agree. No cascade is taken to pass 100 million posts.
+
+   A shorter window shrinks every cascade by one factor. The factor is set so that the number of cascades
+   of 10,000+ posts matches the count for that window: measured for three days and for one day, estimated
+   for two. For three days this reproduces the measured posts (57.5M against 57.6M). Above 20,000 posts the counts follow a power law set by the mean size
    there. Below 1,000 only one count exists, made under an earlier definition, so everything below 1,000
    is rough.
 
@@ -28,8 +31,10 @@
     Q: [44.8e6, 13.8e6, 4.7e6, 0.9e6],          // posts in quote-rooted cascades of S+ (lower bounds)
     n100: 1568662,                              // cascades of 100+ posts, earlier definition
     band100: 825.9e6 - 449.8e6,                 // posts in cascades of 100 to 999, earlier definition
-    // three days against seven, measured at 10,000+ (cascades: 3,069 of 3,206; posts: 57.6M of 60.2M)
-    window: { 7: { n: 1, p: 1 }, 3: { n: 3069 / 3206, p: 57.6 / 60.2 } },
+    // keep: share of the seven-day cascades of 10,000+ whose size has passed 10,000 by the end of the window.
+    // Measured for three days (3,069 of 3,206) and one day; two days is an estimate between them.
+    // One and two days are rough: the post totals for them were not measured.
+    window: { 7: { keep: 1 }, 3: { keep: 3069 / 3206 }, 2: { keep: 0.91, rough: true }, 1: { keep: 0.664, rough: true } },
     months: { September: 1, August: 764.1 / 825.9, July: 709.2 / 825.9, June: 710.3 / 825.9 },
     largest: 400000,
     // the stream-only design: a day-1 rule for cascades that will pass 10,000 in seven days, original-post
@@ -85,18 +90,28 @@
       const inBand = B.T[k + 1] + (B.count(u) - B.count((k + 1) / G)) * Math.sqrt(s * B.size((k + 1) / G));
       return [D.P[j] + inBand, D.Q[j] + B.q * inBand];
     }
-    return { N, P, tail, bands };
+    // the factor by which a window shrinks every cascade, so that keep * N(10,000) cascades still reach 10,000
+    const memo = {};
+    function shrink(keep) {
+      if (!(keep < 1)) return 1;
+      if (memo[keep]) return memo[keep];
+      let lo = 0.2, hi = 1; const want = keep * D.N[2];
+      for (let i = 0; i < 60; i++) { const m = (lo + hi) / 2; if (N(D.S[2] / m)[0] < want) lo = m; else hi = m; }
+      return (memo[keep] = (lo + hi) / 2);
+    }
+    return { N, P, tail, bands, shrink };
   })();
 
-  /* o: { scale: volume against September, window: 3 | 7, quoteRooted: count quote-rooted cascades too }
+  /* o: { scale: volume against September, window: 1 | 2 | 3 | 7 days, quoteRooted: count quote-rooted cascades too }
      N: cascades rooted at an original post (measured). NQ: cascades rooted at a quote (estimated).
      NA: both. P: posts in both. PO: posts in the first kind only. */
   function population(o) {
-    const w = DATA.window[o.window] || DATA.window[7], sc = o.scale == null ? 1 : o.scale, kn = sc * w.n, kp = sc * w.p, q = o.quoteRooted === false ? 0 : 1;
-    const at = (f, k) => (s) => (s < TOP ? f(Math.max(100, s)).map((v) => k * v) : [0, 0]);
-    const n = at(BASE.N, kn), p = at(BASE.P, kp);
+    const w = DATA.window[o.window] || DATA.window[7], g = BASE.shrink(w.keep), sc = o.scale == null ? 1 : o.scale, q = o.quoteRooted === false ? 0 : 1;
+    // a cascade of s posts in this window is one of s / g posts in seven days
+    const at = (f, k) => (s) => { const x = Math.max(100, s) / g; return x < TOP ? f(x).map((v) => k * v) : [0, 0]; };
+    const n = at(BASE.N, sc), p = at(BASE.P, sc * g);
     const N = (s) => n(s)[0], NQ = (s) => q * n(s)[1], NA = (s) => N(s) + NQ(s), PO = (s) => p(s)[0], P = (s) => PO(s) + q * p(s)[1];
-    return { N, NQ, NA, P, PO, tail: BASE.tail, kn, kp, mean: (s) => P(s) / NA(s), rough: (s) => s < DATA.S[0] };
+    return { N, NQ, NA, P, PO, tail: BASE.tail, shrink: g, windowRough: !!w.rough, mean: (s) => P(s) / NA(s), rough: (s) => s < DATA.S[0] };
   }
 
   /* Retweets downloaded when at most M are read from each cascade between lo and hi posts. Each step uses

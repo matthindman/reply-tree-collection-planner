@@ -30,21 +30,31 @@ check('quote-rooted cascades of 10,000+', sep7.NQ(10000), 671 * 0.9 / 26.2 + (4.
 check('none when they are not counted', orig7.NQ(1000) + orig7.P(1000) - orig7.PO(1000), 0, 0);
 check('all roots are the two kinds together', sep7.NA(5000), sep7.N(5000) + sep7.NQ(5000), 1e-9);
 
-// three days against seven, and other months
-check('cascades of 10,000+ in three days', sep3.N(10000), 3069, 1e-6);
-check('their posts, original roots', sep3.PO(10000) / M, 57.6, 1e-4);
-check('their posts, quote-rooted included', sep3.P(10000) / M, 57.6 / 60.2 * 64.9, 1e-4);
+// shorter windows shrink every cascade by one factor, set from the count of cascades of 10,000+
+check('cascades of 10,000+ in three days (the factor is set from this)', sep3.N(10000), 3069, 1e-3);
+check('their posts, original roots: measured as 57.6M, not used to set the factor', sep3.PO(10000) / M, 57.6, 0.15);
+check('their posts, quote-rooted included', sep3.P(10000) / M, 57.6 / 60.2 * 64.9, 0.2);
+{ const d1 = C.population({ window: 1, quoteRooted: false }), d2 = C.population({ window: 2, quoteRooted: false }), d3 = C.population({ window: 3, quoteRooted: false });
+  check('cascades of 10,000+ in one day', d1.N(10000), 0.664 * 3206, 1e-3);
+  check('cascades of 10,000+ in two days (an estimate)', d2.N(10000), 0.91 * 3206, 1e-3);
+  yes('a shorter window shrinks more', d1.shrink < d2.shrink && d2.shrink < d3.shrink && d3.shrink < 1 && orig7.shrink === 1);
+  yes('and has fewer cascades and posts at every size', [100, 1000, 3000, 10000, 50000].every((s) => d1.N(s) < d2.N(s) && d2.N(s) < d3.N(s) && d3.N(s) < orig7.N(s) && d1.P(s) < d2.P(s) && d2.P(s) < d3.P(s) && d3.P(s) < orig7.P(s)));
+  // a cascade of s posts in one day is one of s / shrink posts in seven, holding shrink times its seven-day posts
+  check('one day is seven days shrunk, counts', d1.N(4000), orig7.N(4000 / d1.shrink), 1e-6);
+  check('one day is seven days shrunk, posts', d1.P(4000), d1.shrink * orig7.P(4000 / d1.shrink), 1e-3);
+  check('counts and posts still describe one population', (d1.P(3000) - d1.P(3003)) / (d1.N(3000) - d1.N(3003)), 3001.5, 3);
+  yes('one and two days are marked rough, three and seven are not', d1.windowRough && d2.windowRough && !d3.windowRough && !orig7.windowRough); }
 check('a month like June', C.population({ scale: D.months.June, window: 7 }).P(1000) / sep7.P(1000), 710.3 / 825.9, 1e-9);
-check('a 31-day month', C.population({ scale: 31 / 30, window: 3 }).N(10000), 3069 * 31 / 30, 1e-6);
+check('a 31-day month', C.population({ scale: 31 / 30, window: 3 }).N(10000), 3069 * 31 / 30, 1e-3);
 
 // the plan: every post from 10,000, replies and quotes below, search passes over every root of 100+
 const base = { full: 10000, rq: 2750, census: 100, passes: 3, rt: 0.85, qt: 0.05, rtMode: 'none', rtN: 100, rtRate: 0.03, stream: 0.01 };
 const but = (o) => Object.assign({}, base, o);
 { const r = C.plan(sep3, base);
-  check('tier 1 costs every post', r.cost1 / M, 57.6 / 60.2 * 64.9, 1e-4);
+  check('tier 1 costs every post', r.cost1 / M, 57.6 / 60.2 * 64.9, 0.2);
   check('tier 1 parts add up', (r.t1.replies + r.t1.quotes + r.t1.retweets) / r.A, 1, 1e-9);
   check('tier 2 costs 15% of the posts between 2,750 and 10,000', r.cost2 / r.B, 0.15, 1e-9);
-  check('cascades in tier 1', r.n1, 3069, 1e-6);
+  check('cascades in tier 1', r.n1, 3069, 1e-3);
   check('search passes: three over every root of 100+, quote-rooted included', r.finding, 3 * (sep3.N(100) + sep3.NQ(100)), 1e-3);
   check('no passes cost nothing', C.plan(sep3, but({ passes: 0 })).finding, 0, 0);
   check('passes left out means one', C.plan(sep3, but({ passes: undefined })).finding, r.roots, 1e-6);
@@ -59,9 +69,11 @@ const but = (o) => Object.assign({}, base, o);
 
 // lowest tier 2 edge that fits, as the retweet share moves (10M reserve)
 { const edge = (rt, reserve) => C.lowest(sep3, but({ rt }), 'rq', 100e6 - reserve, 100, 10000);
-  check('tier 2 edge at 80% retweets', edge(0.80, 10e6), 3570, 40);
-  check('tier 2 edge at 85% retweets', edge(0.85, 10e6), 2720, 40);
-  check('tier 2 edge at 89% retweets', edge(0.89, 10e6), 1885, 40);
+  check('tier 2 edge at 80% retweets', edge(0.80, 10e6), 3590, 40);
+  check('tier 2 edge at 85% retweets', edge(0.85, 10e6), 2745, 40);
+  check('tier 2 edge at 89% retweets', edge(0.89, 10e6), 1910, 40);
+  { const d1 = C.population({ window: 1 }), e1 = C.lowest(d1, but({ passes: 1 }), 'rq', 90e6, 100, 10000);
+    yes('a one-day window lets the second tier reach below 1,000 posts', e1 > 400 && e1 < 800 && C.plan(d1, but({ passes: 1, rq: e1 })).total <= 90e6 + 1); }
   [0.80, 0.85, 0.89].forEach((rt) => { const e = edge(rt, 10e6);
     yes('at the edge the plan is within budget, ' + rt, C.plan(sep3, but({ rt, rq: e })).total <= 90e6 + 1);
     yes('just below the edge it is not, ' + rt, C.plan(sep3, but({ rt, rq: e * 0.99 })).total > 90e6); });
@@ -74,11 +86,11 @@ const but = (o) => Object.assign({}, base, o);
 
 // the other splits in the design draft (85% retweets, 10M reserve, three passes)
 { const none = C.plan(sep3, but({ full: Infinity, rq: 1000 })), left = 90e6 - none.total;
-  check('replies and quotes from 1,000, no cascade in full', none.total / M, 60.3, 0.1);
+  check('replies and quotes from 1,000, no cascade in full', none.total / M, 61.1, 0.1);
   yes('the first 200 retweets of each fit what is left', C.plan(sep3, but({ full: Infinity, rq: 1000, rtMode: 'first', rtN: 200 })).bought <= left);
   yes('the first 250 do not', C.plan(sep3, but({ full: Infinity, rq: 1000, rtMode: 'first', rtN: 250 })).bought > left);
-  check('or a random sample of this share', left / none.t2.allRetweets, 0.095, 0.002);
-  check('replies and quotes from 1,000, then every post from', C.lowest(sep3, but({ rq: 1000 }), 'full', 90e6, 1000, 1e6), 16100, 150);
+  check('or a random sample of this share', left / none.t2.allRetweets, 0.091, 0.002);
+  check('replies and quotes from 1,000, then every post from', C.lowest(sep3, but({ rq: 1000 }), 'full', 90e6, 1000, 1e6), 16320, 150);
   check('every post and no second tier, from', C.lowest(sep3, but({ rq: Infinity }), 'full', 90e6, 1000, 1e6), 7660, 80);
   check('every post, seven days, whole cap, no search passes, from', C.lowest(sep7, but({ rq: Infinity, passes: 0 }), 'full', 100e6, 1000, 1e6), 6880, 80);
   const r = C.plan(sep3, but({ full: Infinity, rq: 1000 }));
