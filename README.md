@@ -9,7 +9,9 @@ Japanese X today" (about 12% of replies in conversations of 100+ posts); the oth
 - **Cascades** (the page opens here): a root with its replies, quotes and retweets, collected in three
   tiers (every post; replies and quotes; the root and its counts). Sizes are measured counts for
   September 2026, in `DATA` at the top of `src/cascade_model.js`; the view is `src/cascades.js`, with its
-  defaults in `DEFAULTS`. Checked by `node test/test_cascade.js`.
+  defaults in `DEFAULTS`. Checked by `node test/test_cascade.js`. Counts and posts come from one size
+  distribution fitted to the measured counts and band totals. Cascade numbers assume that search by
+  counts finds every cascade of the size asked for, which has not been tested.
 - **Reply trees**: the reply part of a cascade, simulated from the stochastic reply-tree model (everything
   described below).
 

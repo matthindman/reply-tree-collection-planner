@@ -1,57 +1,91 @@
 // Checks of the cascade arithmetic. Exits non-zero if any check fails.
+// Where it can, a check recomputes its expected value from the measured tables, not from the model's own functions.
 const C = require('../src/cascade_model.js');
 let failed = 0;
-const check = (name, got, want, tol) => { const ok = Math.abs(got - want) <= tol; if (!ok) failed++; console.log((ok ? 'ok   ' : 'FAIL ') + name + ': ' + (+(+got).toPrecision(5)) + ' (expected ' + want + ' +/- ' + tol + ')'); };
-const D = C.DATA, sep7 = C.population({ scale: 1, window: 7 }), sep3 = C.population({ scale: 1, window: 3 }), orig = C.population({ scale: 1, window: 7, quoteRooted: false });
+const check = (name, got, want, tol) => { const ok = Math.abs(got - want) <= tol; if (!ok) failed++; console.log((ok ? 'ok   ' : 'FAIL ') + name + ': ' + (+(+got).toPrecision(6)) + ' (expected ' + (+(+want).toPrecision(6)) + ' +/- ' + tol + ')'); };
+const yes = (name, cond) => check(name, cond ? 1 : 0, 1, 0);
+const D = C.DATA, M = 1e6;
+const sep7 = C.population({ window: 7 }), sep3 = C.population({ window: 3 }), orig7 = C.population({ window: 7, quoteRooted: false });
 
 // the curves pass through the measured points
 D.S.forEach((s, i) => {
-  check('cascades of ' + s + '+', sep7.N(s), D.N[i], 1e-6);
-  check('posts in cascades of ' + s + '+, quote-rooted included', sep7.P(s) / 1e6, (D.P[i] + D.Q[i]) / 1e6, 1e-6);
-  check('posts in cascades of ' + s + '+, original roots only', orig.P(s) / 1e6, D.P[i] / 1e6, 1e-6);
+  check('cascades of ' + s + '+, original roots', sep7.N(s), D.N[i], 1e-6);
+  check('posts in cascades of ' + s + '+, original roots', orig7.P(s) / M, D.P[i] / M, 1e-4);
+  check('posts in cascades of ' + s + '+, quote-rooted included', sep7.P(s) / M, (D.P[i] + D.Q[i]) / M, 1e-4);
 });
-check('cascades of 100+', sep7.N(100), 1568662, 1e-3);
-check('posts in cascades of 100+: the 1,000+ total plus the 100 to 999 band', sep7.P(100) / 1e6, 384.6 + 376.1, 0.01);
+check('cascades of 100+, original roots', sep7.N(100), 1568662, 1e-3);
+check('posts in cascades of 100+: the 1,000+ total plus the 100 to 999 band', sep7.P(100) / M, 384.6 + 376.1, 0.01);
+
+// counts and posts describe one population: summing sizes over the count curve gives the measured posts in each band
+const sumSizes = (pop, a, b) => { let t = 0, x = a; const n = 2000; for (let i = 1; i <= n; i++) { const y = a * Math.pow(b / a, i / n); t += (pop.N(x) - pop.N(y)) * Math.sqrt(x * y); x = y; } return t; };
+[[1000, 5000], [5000, 10000], [10000, 20000]].forEach(([a, b], i) => check('sizes summed over the counts, ' + a + ' to ' + b, sumSizes(orig7, a, b) / M, (D.P[i] - D.P[i + 1]) / M, 0.02));
+[1000, 2300, 7000, 15000].forEach((s) => check('cascades leaving at ' + s + ' posts have about that size', (orig7.P(s) - orig7.P(s * 1.001)) / (orig7.N(s) - orig7.N(s * 1.001)), s * 1.0005, s * 0.001));
+yes('each band bends less than its slope, so counts fall with size', C.BASE.bands.every((b) => Math.abs(b.c) < b.L));
+yes('counts and posts fall with size everywhere', (() => { for (let s = 100; s < 1e6; s *= 1.01) if (!(sep7.N(s) > sep7.N(s * 1.01) && sep7.P(s) > sep7.P(s * 1.01) && sep7.NQ(s) > sep7.NQ(s * 1.01))) return false; return true; })());
 check('tail exponent above 20,000, from the mean size there', sep7.tail, 39046 / 19046, 0.001);
 check('about one cascade a month passes 400,000 posts', sep7.N(400000), 1.4, 0.5);
-check('curves fall with size', [150, 700, 3000, 8000, 15000, 60000].every((s) => sep7.N(s) > sep7.N(s * 1.1) && sep7.P(s) > sep7.P(s * 1.1)) ? 1 : 0, 1, 0);
-check('three days keeps 95.7% of seven', sep3.P(10000) / sep7.P(10000), 0.957, 0.001);
-check('every post of cascades of 10,000+, three days', sep3.P(10000) / 1e6, 62.1, 0.05);
-check('a month like June', C.population({ scale: D.months.June, window: 7 }).P(1000) / sep7.P(1000), 0.86, 0.001);
 
-// the plan in the design draft: every post from 10,000, replies and quotes below, census of 100+
-const base = { full: 10000, rq: 2400, census: 100, passes: 3, rt: 0.85, qt: 0.05, rtMode: 'none', rtN: 100, rtRate: 0.03, stream: 0.01 };
+// quote-rooted cascades: estimated band by band from their posts
+check('quote-rooted cascades of 10,000+', sep7.NQ(10000), 671 * 0.9 / 26.2 + (4.7 - 0.9) / (60.2 - 26.2) * (3206 - 671), 0.01);
+check('none when they are not counted', orig7.NQ(1000) + orig7.P(1000) - orig7.PO(1000), 0, 0);
+check('all roots are the two kinds together', sep7.NA(5000), sep7.N(5000) + sep7.NQ(5000), 1e-9);
+
+// three days against seven, and other months
+check('cascades of 10,000+ in three days', sep3.N(10000), 3069, 1e-6);
+check('their posts, original roots', sep3.PO(10000) / M, 57.6, 1e-4);
+check('their posts, quote-rooted included', sep3.P(10000) / M, 57.6 / 60.2 * 64.9, 1e-4);
+check('a month like June', C.population({ scale: D.months.June, window: 7 }).P(1000) / sep7.P(1000), 710.3 / 825.9, 1e-9);
+check('a 31-day month', C.population({ scale: 31 / 30, window: 3 }).N(10000), 3069 * 31 / 30, 1e-6);
+
+// the plan: every post from 10,000, replies and quotes below, search passes over every root of 100+
+const base = { full: 10000, rq: 2750, census: 100, passes: 3, rt: 0.85, qt: 0.05, rtMode: 'none', rtN: 100, rtRate: 0.03, stream: 0.01 };
+const but = (o) => Object.assign({}, base, o);
 { const r = C.plan(sep3, base);
-  check('tier 1 costs every post', r.cost1 / 1e6, 62.1, 0.05);
+  check('tier 1 costs every post', r.cost1 / M, 57.6 / 60.2 * 64.9, 1e-4);
   check('tier 1 parts add up', (r.t1.replies + r.t1.quotes + r.t1.retweets) / r.A, 1, 1e-9);
-  check('tier 2 costs 15% of the posts between 2,400 and 10,000', r.cost2 / r.B, 0.15, 1e-9);
-  check('tier 2 cost', r.cost2 / 1e6, 22.5, 0.6);
-  check('cascades in tier 1', r.n1, 3068, 2);
-  check('cascades in tier 2', r.n2, 31500, 700);
-  check('census: three passes over every root of 100+', r.finding, 3 * sep3.N(100), 1);
-  check('total with a 10M reserve fits 100M', r.total + 10e6 <= 100e6 ? 1 : 0, 1, 0);
+  check('tier 2 costs 15% of the posts between 2,750 and 10,000', r.cost2 / r.B, 0.15, 1e-9);
+  check('cascades in tier 1', r.n1, 3069, 1e-6);
+  check('search passes: three over every root of 100+, quote-rooted included', r.finding, 3 * (sep3.N(100) + sep3.NQ(100)), 1e-3);
+  check('no passes cost nothing', C.plan(sep3, but({ passes: 0 })).finding, 0, 0);
+  check('passes left out means one', C.plan(sep3, but({ passes: undefined })).finding, r.roots, 1e-6);
+  yes('the plan with a 10M reserve fits 100M', r.total + 10e6 <= 100e6);
   check('retweets of tier 2 seen in the 1% stream', r.streamRetweets, 0.01 * 0.85 * r.B, 1);
-  check('first 100 retweets of each tier 2 cascade, quote-rooted ones included', C.plan(sep3, Object.assign({}, base, { rtMode: 'first' })).bought / 1e6, 3.5, 0.15);
-  check('a 3% bought sample of tier 2 retweets', C.plan(sep3, Object.assign({}, base, { rtMode: 'sample' })).bought, 0.03 * 0.85 * r.B, 1);
-  check('first N with N above every size is every retweet', C.plan(sep3, Object.assign({}, base, { rtMode: 'first', rtN: 1e7 })).bought / r.t2.allRetweets, 1, 1e-9); }
+  // every cascade of 2,750+ posts has more than 100 retweets at 85%, so the first 100 of each cost 100 a cascade
+  check('first 100 retweets of each tier 2 cascade', C.plan(sep3, but({ rtMode: 'first' })).bought, 100 * (r.n2 + r.q2), 1);
+  check('a 3% bought sample of tier 2 retweets', C.plan(sep3, but({ rtMode: 'sample' })).bought, 0.03 * 0.85 * r.B, 1);
+  check('first N with N above every size is every retweet', C.plan(sep3, but({ rtMode: 'first', rtN: 1e9 })).bought / r.t2.allRetweets, 1, 1e-9);
+  const open = C.plan(sep3, but({ full: Infinity, rq: 1000, rtMode: 'first', rtN: 1e9 }));
+  check('the same with no cascade in full, tail included', open.bought / open.t2.allRetweets, 1, 1e-9); }
 
 // lowest tier 2 edge that fits, as the retweet share moves (10M reserve)
-{ const edge = (rt, reserve) => C.lowest(sep3, Object.assign({}, base, { rt }), 'rq', 100e6 - reserve, 100, 10000);
-  check('tier 2 edge at 80% retweets', edge(0.80, 10e6), 3200, 200);
-  check('tier 2 edge at 85% retweets', edge(0.85, 10e6), 2400, 150);
-  check('tier 2 edge at 89% retweets', edge(0.89, 10e6), 1600, 120);
-  const e = edge(0.85, 10e6);
-  check('at the edge the plan is within budget', C.plan(sep3, Object.assign({}, base, { rq: e })).total <= 90e6 ? 1 : 0, 1, 0);
-  check('just below the edge it is not', C.plan(sep3, Object.assign({}, base, { rq: e * 0.98 })).total > 90e6 ? 1 : 0, 1, 0);
-  check('nothing fits when tier 1 alone is over budget', C.lowest(sep3, base, 'rq', 50e6, 100, 10000) === null ? 1 : 0, 1, 0); }
+{ const edge = (rt, reserve) => C.lowest(sep3, but({ rt }), 'rq', 100e6 - reserve, 100, 10000);
+  check('tier 2 edge at 80% retweets', edge(0.80, 10e6), 3570, 40);
+  check('tier 2 edge at 85% retweets', edge(0.85, 10e6), 2720, 40);
+  check('tier 2 edge at 89% retweets', edge(0.89, 10e6), 1885, 40);
+  [0.80, 0.85, 0.89].forEach((rt) => { const e = edge(rt, 10e6);
+    yes('at the edge the plan is within budget, ' + rt, C.plan(sep3, but({ rt, rq: e })).total <= 90e6 + 1);
+    yes('just below the edge it is not, ' + rt, C.plan(sep3, but({ rt, rq: e * 0.99 })).total > 90e6); });
+  yes('nothing fits when tier 1 alone is over budget', C.lowest(sep3, base, 'rq', 50e6, 100, 10000) === null);
+  yes('no budget, no answer', C.lowest(sep3, base, 'rq', 0, 100, 10000) === null && C.lowest(sep3, base, 'rq', NaN, 100, 10000) === null && C.lowest(sep3, base, 'rq', -5, 100, 10000) === null);
+  const far = C.lowest(sep3, but({ full: Infinity, passes: 0 }), 'rq', 1e6, 100, Infinity);
+  yes('an open upper limit still gives a finite size', far > 1000 && far < 1e8 && C.plan(sep3, but({ full: Infinity, passes: 0, rq: far })).total <= 1e6 + 1);
+  yes('and an answer however small the budget', C.lowest(sep3, but({ rq: Infinity, passes: 0 }), 'full', 1000, 1000, Infinity) <= 1e8);
+  check('nothing at or above 100 million posts', sep3.NA(1e8) + sep3.P(1e8) + C.firstRetweets(sep3, 1e8, Infinity, 0.85, 100), 0, 0); }
 
-// every post with no tiers
-{ const none = Object.assign({}, base, { rq: Infinity, census: 1000, passes: 1 });
-  check('every post fits 100M from about 6,800 posts (seven days, no census)', C.lowest(sep7, Object.assign({}, none, { passes: 0 }), 'full', 100e6, 1000, 1e6), 6760, 80);
-  const r = C.plan(sep3, Object.assign({}, base, { full: Infinity, rq: 1000 }));
-  check('no cascade in full: tier 1 is empty', r.cost1 + r.n1, 0, 0);
-  check('replies and quotes from 1,000 at 85% retweets', r.cost2 / 1e6, 55.2, 0.1); }
+// the other splits in the design draft (85% retweets, 10M reserve, three passes)
+{ const none = C.plan(sep3, but({ full: Infinity, rq: 1000 })), left = 90e6 - none.total;
+  check('replies and quotes from 1,000, no cascade in full', none.total / M, 60.3, 0.1);
+  yes('the first 200 retweets of each fit what is left', C.plan(sep3, but({ full: Infinity, rq: 1000, rtMode: 'first', rtN: 200 })).bought <= left);
+  yes('the first 250 do not', C.plan(sep3, but({ full: Infinity, rq: 1000, rtMode: 'first', rtN: 250 })).bought > left);
+  check('or a random sample of this share', left / none.t2.allRetweets, 0.095, 0.002);
+  check('replies and quotes from 1,000, then every post from', C.lowest(sep3, but({ rq: 1000 }), 'full', 90e6, 1000, 1e6), 16100, 150);
+  check('every post and no second tier, from', C.lowest(sep3, but({ rq: Infinity }), 'full', 90e6, 1000, 1e6), 7660, 80);
+  check('every post, seven days, whole cap, no search passes, from', C.lowest(sep7, but({ rq: Infinity, passes: 0 }), 'full', 100e6, 1000, 1e6), 6880, 80);
+  const r = C.plan(sep3, but({ full: Infinity, rq: 1000 }));
+  check('no cascade in full: tier 1 is empty', r.cost1 + r.n1 + r.q1, 0, 0);
+  check('replies and quotes from 1,000 cost 15% of every post there', r.cost2, 0.15 * sep3.P(1000), 1); }
 
 check('1% stream sees a 100-post cascade', C.binomSf(1, 100, 0.01), 0.634, 0.001);
+check('at least no sampled posts is certain', C.binomSf(0, 100, 0.01), 1, 0);
 console.log(failed ? '\n' + failed + ' check(s) FAILED' : '\nall checks passed');
 process.exit(failed ? 1 : 0);
