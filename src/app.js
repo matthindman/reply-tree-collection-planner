@@ -13,6 +13,9 @@
       today: { label: 'Best guess', table: 'today', params: (typeof SCENARIO_TABLES !== 'undefined' && SCENARIO_TABLES.today) ? SCENARIO_TABLES.today.params : null },
       // The Opus analysis's own preset: the same sizes, more root-driven.
       opus: { label: 'Opus', table: 'opus', params: (typeof SCENARIO_TABLES !== 'undefined' && SCENARIO_TABLES.opus) ? SCENARIO_TABLES.opus.params : null },
+      // Fitted to the September 2026 archive (claude/cascade2026): reply trees under popular roots, and under quotes.
+      sep2026: { label: 'Popular roots 2026', table: 'sep2026', params: (typeof SCENARIO_TABLES !== 'undefined' && SCENARIO_TABLES.sep2026) ? SCENARIO_TABLES.sep2026.params : null },
+      sep2026q: { label: 'Under quotes 2026', table: 'sep2026q', params: (typeof SCENARIO_TABLES !== 'undefined' && SCENARIO_TABLES.sep2026q) ? SCENARIO_TABLES.sep2026q.params : null },
       japan2011: { label: 'Japan 2011', table: 'japan2011',
         params: { w: 0.5655484, a1: 1.5781099, t1: 1.2234419, a2: 2.0912357, t2: 0.0100002, alpha0: 3.9668806, b1: 0.0347892, b2: 0.035352,
                   c0: 0.8176346, c1: 1.4687561, s1: 1.783306, g0: -2.7786261, mu: -0.527664, gam: 0.3392188, sig: 0.9014904, tau: 0.3806759, f0: -2.1083761, f1: -0.4869628 } },
@@ -40,6 +43,8 @@
       high: { label: 'High end', table: 'high', set: { mix: 0 }, note: 'Best guess with more popular roots, so 32% of replies sit in conversations of 100+ posts, near the high end of the reviews\u2019 ranges. Fewer of them are quiet-root.' },
       quiet: { label: 'Quiet-root', table: 'quiet', set: { mix: 0 }, note: 'Best guess with exchanges that vary more in length: 36% of conversations of 100+ posts are quiet-root.' },
       opus: { label: 'Root-driven', table: 'opus', set: { mix: 0 }, note: 'Claude Opus\u2019s settings: similar concentration, but 87% of conversations of 100+ posts are root-driven.' },
+      sep2026: { label: 'Popular roots, Sep 2026', table: 'sep2026', set: { mix: 0 }, note: 'Measured, not guessed: the model fitted to the reply trees of roots with 100+ retweets and quotes, posted on 2 and 3 September 2026. Popular roots only, so large conversations are far more common than among all conversations: use it for the shape of large reply trees, not for volumes.' },
+      sep2026q: { label: 'Under quotes, Sep 2026', table: 'sep2026q', set: { mix: 0 }, note: 'Measured: the model fitted to conversations rooted at a quote of a large cascade, 2 and 3 September 2026. These were not selected on their own size, so they are the closest the archive has to ordinary conversations.' },
       japan2011: { label: 'Japan 2011', table: 'japan2011', set: { mix: 0 }, note: 'The model fitted to the published 2011 curves.' },
       usArchives: { label: 'US archives', table: 'japan2011', set: { mix: 100 }, note: 'The US news and election archives, selected by topic and account.' },
     },

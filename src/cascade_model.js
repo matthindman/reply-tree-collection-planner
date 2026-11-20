@@ -1,48 +1,43 @@
-/* cascade_model.js — arithmetic for collecting cascades in tiers, on measured size tables.
+/* cascade_model.js — arithmetic for collecting cascades in tiers, on the measured September 2026 population.
 
    A cascade is the posts sharing one conversation ID (the root and its replies at any depth) plus every
    retweet and quote of those posts. Its size leaves the root out. A quote that is not a reply is a leaf of
    the cascade it quotes and the root of its own.
 
-   DATA holds counts for September 2026 from the full Japanese stream (seven-day window). The model is one
-   size distribution: between two measured sizes the count of cascades is a smooth curve on log-log axes,
-   bent so that the posts it implies equal the posts measured in that band. Posts are then summed from the
-   counts, so the two agree. No cascade is taken to pass 100 million posts.
+   The population is CASCADE_TABLES (cascade_tables.js): synthetic cascades of 100+ posts. No row is a real
+   cascade. Rows are simulated from summary statistics of groups of at least 100 real cascades in the 30 daily
+   summaries from the full Japanese stream, so that counts and post totals by size match the measured ones.
+   Each row stands for `w` cascades a month and has a size at 24, 48, 72 and 168 hours, replies and quotes.
+   Two things are not in the summaries and come from models fitted to the two days for which every post is on file:
+     led         whether the cascade is reply-led (at least half of its retweets hang from replies)
+     r0, d0, q0  what the API reports for the root: its own retweets, direct replies and quotes
+   A shorter window uses the measured size at that age; replies, quotes and the root's counts are taken to
+   have grown in step with the size.
 
-   A shorter window shrinks every cascade by one factor. The factor is set so that the number of cascades
-   of 10,000+ posts matches the count for that window: measured for three days and for one day, estimated
-   for two. For three days this reproduces the measured posts (57.5M against 57.6M). Above 20,000 posts the counts follow a power law set by the mean size
-   there. Below 1,000 only one count exists, made under an earlier definition, so everything below 1,000
-   is rough.
-
-   Counts were measured for cascades rooted at an original post. For cascades rooted at a quote only posts
-   are known (lower bounds). Their number is estimated by taking them to have the same sizes, band by band.
-
-   Three tiers: every post for cascades of `full`+ posts; replies and quotes for cascades of `rq`+;
-   the root and its counts for cascades of `census`+. Costs are in units: one unit is the charge for one
-   post returned. No DOM access. */
+   A plan has three steps, each with its own cost in units (one unit is the charge for one post returned):
+     find    search returns every root whose own retweet count or reply count passes a floor, on each pass
+     size    for the roots whose counts suggest a cascade near the second tier, read the replies; each reply
+             carries its own counts, which gives the size. Replies read for a cascade that turns out too
+             small are spent all the same.
+     collect every post for cascades of `full`+ posts; replies and quotes for cascades of `rq`+.
+   A cascade that search does not return, or that is not sized, is missed. No DOM access. */
 (function (root) {
   'use strict';
 
+  const TAB = (typeof CASCADE_TABLES !== 'undefined') ? CASCADE_TABLES : require('./cascade_tables.js');
+  const R = TAB.rows, F = TAB.facts, COUNT = R.w.length, KEY = { 1: 's1', 2: 's2', 3: 's3', 7: 's7' };
+
   const DATA = {
-    S: [1000, 5000, 10000, 20000],
-    N: [122502, 12976, 3206, 671],              // cascades of S+ posts, original-post roots
-    P: [339.8e6, 125.8e6, 60.2e6, 26.2e6],      // posts in them
-    Q: [44.8e6, 13.8e6, 4.7e6, 0.9e6],          // posts in quote-rooted cascades of S+ (lower bounds)
-    n100: 1568662,                              // cascades of 100+ posts, earlier definition
-    band100: 825.9e6 - 449.8e6,                 // posts in cascades of 100 to 999, earlier definition
-    // keep: share of the seven-day cascades of 10,000+ whose size has passed 10,000 by the end of the window.
-    // Measured for three days (3,069 of 3,206) and one day; two days is an estimate between them.
-    // One and two days are rough: the post totals for them were not measured.
-    window: { 7: { keep: 1 }, 3: { keep: 3069 / 3206 }, 2: { keep: 0.91, rough: true }, 1: { keep: 0.664, rough: true } },
-    months: { September: 1, August: 764.1 / 825.9, July: 709.2 / 825.9, June: 710.3 / 825.9 },
-    largest: 400000,
-    // the stream-only design: a day-1 rule for cascades that will pass 10,000 in seven days, original-post
-    // roots. It finds most of them and downloads this many posts, wrong guesses included.
+    S: [1000, 5000, 10000, 20000],                 // sizes at which the page prints counts
+    months: { September: 1, August: 764.1 / 825.9, July: 709.2 / 825.9, June: 710.3 / 825.9 },   // total volume against September, earlier definition
+    largest: F.largest,
+    passed10k: F.passed10k,                        // share of the seven-day cascades of 10,000+ that have passed 10,000 by 24, 48, 72 hours
+    growth: Object.assign({ hours: F.growth.hours }, F.growth.bands),   // median share of the seven-day size reached
+    replyLed: F.reply_led,                         // share of cascades and of posts, and the share of posts day by day
+    main: F.main, quote: F.quote,                  // cascades of 100+ and their posts, seven days: original-post roots, quote roots
+    rule: F.rule,                                  // size from a root's counts
+    // the stream-only design: a day-1 rule for cascades that will pass 10,000 in seven days
     streamOnly: { cascades: 3206, posts: 60.2e6, low: 68.7e6, high: 98.6e6 },
-    // median share of the seven-day size reached, read off a chart
-    growth: { hours: [1, 3, 6, 12, 24, 48], '100 to 999': [0.09, 0.29, 0.48, 0.70, 0.93, 0.99], '1,000 to 9,999': [0.02, 0.15, 0.35, 0.60, 0.89, 0.99], '10,000+': [0.13, 0.30, 0.46, 0.65, 0.86, 0.99] },
-    passed10k: { 24: 0.664, 72: 3069 / 3206 },  // share of the seven-day cascades of 10,000+ whose total size had passed 10,000
   };
 
   function binomSf(h, n, p) {                                // P(Binomial(n,p) >= h)
@@ -54,107 +49,122 @@
     return cdf >= 1 ? 0 : 1 - cdf;
   }
 
-  /* The September, seven-day distribution, built once. Band j runs from xs[j] to xs[j+1]. In it
-     ln N(u) = ln N_j - L u + c u (1 - u), u the position on a log scale, L = ln(N_j / N_j+1). The bend c
-     is solved so the posts in the band equal the measured posts; |c| < L keeps the count falling. */
-  const G = 240, TOP = 1e8;                                   // TOP: no cascade is taken to be this large
-  const BASE = (function () {
-    const D = DATA, last = D.S.length - 1, share = D.P[0] / (D.P[0] + D.Q[0]);
-    const xs = [100].concat(D.S), n = [D.n100].concat(D.N);
-    const posts = [D.band100 * share], quote = [D.band100 * (1 - share)];
-    for (let i = 0; i < last; i++) { posts.push(D.P[i] - D.P[i + 1]); quote.push(D.Q[i] - D.Q[i + 1]); }
-    const tail = (D.P[last] / D.N[last]) / (D.P[last] / D.N[last] - D.S[last]);        // power-law exponent above 20,000
-    const bands = posts.map((target, j) => {
-      const a = xs[j], b = xs[j + 1], L = Math.log(n[j] / n[j + 1]), R = Math.log(b / a);
-      const count = (c, u) => n[j] * Math.exp(-L * u + c * u * (1 - u)), size = (u) => a * Math.exp(R * u);
-      const sum = (c) => { let t = 0; for (let k = 0; k < G; k++) t += (count(c, k / G) - count(c, (k + 1) / G)) * Math.sqrt(size(k / G) * size((k + 1) / G)); return t; };
-      let lo = -0.98 * L, hi = 0.98 * L;
-      for (let i = 0; i < 70; i++) { const m = (lo + hi) / 2; if (sum(m) < target) lo = m; else hi = m; }
-      const c = (lo + hi) / 2, T = new Array(G + 1); T[G] = 0;                        // T[k]: posts from grid point k to the band's top
-      for (let k = G - 1; k >= 0; k--) T[k] = T[k + 1] + (count(c, k / G) - count(c, (k + 1) / G)) * Math.sqrt(size(k / G) * size((k + 1) / G));
-      return { a, b, R, c, L, T, count: (u) => count(c, u), size, q: quote[j] / target, fitted: T[0], target };
+  // size of a cascade as read from its root's counts alone
+  function fromCounts(r0, d0, q0) {
+    const own = r0 + d0 + q0, k = DATA.rule;
+    return d0 > k.ratio * r0 ? own + k.kB * d0 : k.kA * own;
+  }
+
+  /* rows: [{ w, s, q, led, rep, qt, r0, d0, q0 }] at one window. Sorted by size, largest first, with running
+     totals, so counts and posts at or above a size are one lookup. o.replyLed === false leaves the reply-led
+     cascades out of every count: they are not wanted and are not collected. */
+  function build(rows, o) {
+    rows = rows.slice().sort((a, b) => b.s - a.s);
+    const wantLed = !o || o.replyLed !== false, n = rows.length;
+    const cN = new Float64Array(n + 1), cQ = new Float64Array(n + 1), cP = new Float64Array(n + 1), cPO = new Float64Array(n + 1), cRep = new Float64Array(n + 1), cQt = new Float64Array(n + 1), cLed = new Float64Array(n + 1);
+    rows.forEach((r, i) => {
+      r.skip = r.led && !wantLed;
+      const w = r.skip ? 0 : r.w;
+      cN[i + 1] = cN[i] + (r.q ? 0 : w); cQ[i + 1] = cQ[i] + (r.q ? w : 0);
+      cP[i + 1] = cP[i] + w * r.s; cPO[i + 1] = cPO[i] + (r.q ? 0 : w * r.s);
+      cRep[i + 1] = cRep[i] + w * r.rep; cQt[i + 1] = cQt[i] + w * r.qt; cLed[i + 1] = cLed[i] + (r.led ? w * r.s : 0);
     });
-    const qTail = D.Q[last] / D.P[last], top = D.S[last];
-    const nqAt = new Array(xs.length); nqAt[last + 1] = qTail * D.N[last];             // quote-rooted cascades at each measured size
-    for (let j = last; j >= 0; j--) nqAt[j] = nqAt[j + 1] + bands[j].q * (n[j] - n[j + 1]);
-    const find = (s) => { let j = 0; while (j < bands.length - 1 && s >= bands[j].b) j++; return j; };
-    // each returns [original-root value, quote-rooted value]
-    function N(s) {
-      if (s >= top) { const v = D.N[last] * Math.pow(s / top, -tail); return [v, qTail * v]; }
-      const j = find(s), B = bands[j], v = B.count(Math.log(s / B.a) / B.R);
-      return [v, nqAt[j + 1] + B.q * (v - n[j + 1])];
-    }
-    function P(s) {
-      if (s >= top) { const v = D.P[last] * Math.pow(s / top, 1 - tail); return [v, qTail * v]; }
-      const j = find(s), B = bands[j], u = Math.log(s / B.a) / B.R, k = Math.min(G - 1, Math.floor(u * G));
-      const inBand = B.T[k + 1] + (B.count(u) - B.count((k + 1) / G)) * Math.sqrt(s * B.size((k + 1) / G));
-      return [D.P[j] + inBand, D.Q[j] + B.q * inBand];
-    }
-    // the factor by which a window shrinks every cascade, so that keep * N(10,000) cascades still reach 10,000
-    const memo = {};
-    function shrink(keep) {
-      if (!(keep < 1)) return 1;
-      if (memo[keep]) return memo[keep];
-      let lo = 0.2, hi = 1; const want = keep * D.N[2];
-      for (let i = 0; i < 60; i++) { const m = (lo + hi) / 2; if (N(D.S[2] / m)[0] < want) lo = m; else hi = m; }
-      return (memo[keep] = (lo + hi) / 2);
-    }
-    return { N, P, tail, bands, shrink };
-  })();
+    const upto = (s) => { let lo = 0, hi = n; while (lo < hi) { const m = (lo + hi) >> 1; if (rows[m].s >= s) lo = m + 1; else hi = m; } return lo; };   // rows of at least s posts
+    const at = (c) => (s) => c[upto(s)];
+    const pop = { rows, N: at(cN), NQ: at(cQ), P: at(cP), PO: at(cPO), Rep: at(cRep), Qt: at(cQt), LedPosts: at(cLed) };
+    pop.NA = (s) => pop.N(s) + pop.NQ(s);
+    pop.RQ = (s) => pop.Rep(s) + pop.Qt(s);
+    pop.mean = (s) => pop.P(s) / pop.NA(s);
+    return pop;
+  }
 
-  /* o: { scale: volume against September, window: 1 | 2 | 3 | 7 days, quoteRooted: count quote-rooted cascades too }
-     N: cascades rooted at an original post (measured). NQ: cascades rooted at a quote (estimated).
-     NA: both. P: posts in both. PO: posts in the first kind only. */
+  /* o: { scale: volume against September, window: 1 | 2 | 3 | 7 days, quoteRooted: count quote-rooted cascades too,
+          replyLed: count reply-led cascades too }
+     N: cascades rooted at an original post. NQ: rooted at a quote. NA: both. P: posts in both. PO: posts in the
+     first kind. Rep, Qt, RQ: replies, quotes, and both, in cascades of at least that size. */
   function population(o) {
-    const w = DATA.window[o.window] || DATA.window[7], g = BASE.shrink(w.keep), sc = o.scale == null ? 1 : o.scale, q = o.quoteRooted === false ? 0 : 1;
-    // a cascade of s posts in this window is one of s / g posts in seven days
-    const at = (f, k) => (s) => { const x = Math.max(100, s) / g; return x < TOP ? f(x).map((v) => k * v) : [0, 0]; };
-    const n = at(BASE.N, sc), p = at(BASE.P, sc * g);
-    const N = (s) => n(s)[0], NQ = (s) => q * n(s)[1], NA = (s) => N(s) + NQ(s), PO = (s) => p(s)[0], P = (s) => PO(s) + q * p(s)[1];
-    return { N, NQ, NA, P, PO, tail: BASE.tail, shrink: g, windowRough: !!w.rough, mean: (s) => P(s) / NA(s), rough: (s) => s < DATA.S[0] };
+    o = o || {};
+    const key = KEY[o.window] || 's7', sc = o.scale == null ? 1 : o.scale, rows = [];
+    for (let i = 0; i < COUNT; i++) {
+      if (o.quoteRooted === false && R.q[i]) continue;
+      const s = R[key][i], f = s / R.s7[i];
+      if (!(s > 0)) continue;
+      rows.push({ w: R.w[i] * sc, s, q: R.q[i], led: R.led[i], rep: R.rep[i] * f, qt: R.qt[i] * f, r0: R.r0[i] * f, d0: R.d0[i] * f, q0: R.q0[i] * f });
+    }
+    const pop = build(rows, o);
+    // what the window keeps: posts of the seven-day cascades of 100+, and how many of the 10,000+ still reach 10,000
+    let p7 = 0, pw = 0; for (let i = 0; i < COUNT; i++) { if (o.quoteRooted === false && R.q[i]) continue; p7 += R.w[i] * R.s7[i]; pw += R.w[i] * R[key][i]; }
+    pop.share = pw / p7; pop.window = o.window || 7;
+    return pop;
   }
 
-  /* Retweets downloaded when at most M are read from each cascade between lo and hi posts. Each step uses
-     the mean size of the cascades in it, so with M above every size the result is every retweet. */
-  function firstRetweets(pop, lo, hi, rt, M) {
-    const top = hi < TOP ? hi : TOP; if (!(top > lo)) return 0;
-    let acc = 0, a = lo; const steps = 200;
-    for (let i = 1; i <= steps; i++) { const b = lo * Math.pow(top / lo, i / steps), w = pop.NA(a) - pop.NA(b); if (w > 0) acc += w * Math.min(rt * (pop.P(a) - pop.P(b)) / w, M); a = b; }
-    return acc;
-  }
-
-  /* o: { full, rq, census, passes, rt, qt, rtMode: 'none'|'first'|'sample', rtN, rtRate, stream }
-     full may be Infinity (no cascade collected in full). passes may be 0 (no search by counts).
-     A cascade in the second tier has to be found, so the census floor is never above rq.
-     n1, n2, n3 count cascades rooted at an original post; q1, q2, q3 are the estimated quote-rooted ones. */
+  /* o: { full, rq, passes, fr, fd, triage: 'counts' | 'stream' | 'all', theta, rtMode: 'none'|'first'|'sample', rtN, rtRate, stream,
+          found: 'search' (default) or 'all' (every cascade is taken as found and sized at no cost) }
+     fr, fd: floors on the root's own retweets and replies; a root passing either is returned on every pass.
+     triage: which returned roots have their replies read. 'counts': those whose size read from the root's counts
+     is at least theta * rq. 'stream': those with enough posts in the 1% sample to suggest theta * rq. 'all': every one.
+     full may be Infinity (no cascade collected in full). n1, n2 count cascades rooted at an original post;
+     q1, q2 those rooted at a quote. */
   function plan(pop, o) {
-    const full = o.full, rq = Math.min(o.rq, full), census = Math.min(o.census, rq), rep = 1 - o.rt - o.qt;
-    const A = pop.P(full), B = Math.max(0, pop.P(rq) - A);              // posts in tier 1, and in tier 2's band
-    const t1 = { replies: rep * A, quotes: o.qt * A, retweets: o.rt * A };
-    const bought = o.rtMode === 'first' ? firstRetweets(pop, rq, full, o.rt, o.rtN) : o.rtMode === 'sample' ? (o.rtRate || 0) * o.rt * B : 0;
-    const t2 = { replies: rep * B, quotes: o.qt * B, retweets: bought, allRetweets: o.rt * B };
-    const roots = pop.NA(census), finding = (o.passes == null ? 1 : o.passes) * roots;   // every root at or above the floor, once a pass
-    const n1 = pop.N(full), n2 = Math.max(0, pop.N(rq) - n1), n3 = Math.max(0, pop.N(census) - n1 - n2);
-    const q1 = pop.NQ(full), q2 = Math.max(0, pop.NQ(rq) - q1), q3 = Math.max(0, pop.NQ(census) - q1 - q2);
-    const cost1 = t1.replies + t1.quotes + t1.retweets, cost2 = t2.replies + t2.quotes, total = cost1 + cost2 + bought + finding;
-    return { full, rq, census, A, B, t1, t2, n1, n2, n3, q1, q2, q3, roots, finding, cost1, cost2, bought, total,
-             replies: t1.replies + t2.replies, downloaded: cost1 + cost2 + bought, posts: A + B,
-             streamRetweets: (o.stream || 0) * t2.allRetweets, censusPosts: Math.max(0, pop.P(census) - A - B) };
+    const full = o.full, rq = Math.min(o.rq, full), all = o.found === 'all', passes = o.passes == null ? 1 : o.passes;
+    const fr = o.fr == null ? Infinity : o.fr, fd = o.fd == null ? Infinity : o.fd, theta = o.theta == null ? 0.5 : o.theta, need = theta * rq;
+    const hits = Math.max(1, Math.ceil(need * (o.stream || 0.01))), triage = o.triage || 'counts';
+    const t1 = { replies: 0, quotes: 0, retweets: 0 }, t2 = { replies: 0, quotes: 0, retweets: 0, allRetweets: 0 };
+    let roots = 0, sized = 0, waste = 0, n1 = 0, n2 = 0, q1 = 0, q2 = 0, A = 0, B = 0, want1 = 0, want2 = 0, gotA = 0, gotB = 0, bought = 0;
+    for (const r of pop.rows) {
+      const cand = all ? r.s >= rq : (r.r0 >= fr || r.d0 >= fd);
+      if (!all && cand) roots += r.w;
+      if (r.skip) continue;                                    // returned by search, recognised, not collected
+      const tier = r.s >= full ? 1 : r.s >= rq ? 2 : 0, rt = r.s - r.rep - r.qt;
+      if (tier === 1) { A += r.w * r.s; want1 += r.w; } else if (tier === 2) { B += r.w * r.s; want2 += r.w; }
+      if (!cand) continue;
+      const pv = all || triage === 'all' ? 1 : triage === 'stream' ? binomSf(hits, Math.round(r.s), o.stream || 0.01) : (fromCounts(r.r0, r.d0, r.q0) >= need ? 1 : 0);
+      if (!(pv > 0)) continue;
+      const w = r.w * pv;
+      sized += w;
+      if (tier === 1) { t1.replies += w * r.rep; t1.quotes += w * r.qt; t1.retweets += w * rt; gotA += w * r.s; if (r.q) q1 += w; else n1 += w; }
+      else if (tier === 2) {
+        t2.replies += w * r.rep; t2.quotes += w * r.qt; t2.allRetweets += w * rt; gotB += w * r.s; if (r.q) q2 += w; else n2 += w;
+        bought += o.rtMode === 'first' ? w * Math.min(rt, o.rtN) : o.rtMode === 'sample' ? w * (o.rtRate || 0) * rt : 0;
+      } else if (!all) waste += w * r.rep;
+    }
+    t2.retweets = bought;
+    const finding = passes * roots, cost1 = t1.replies + t1.quotes + t1.retweets, cost2 = t2.replies + t2.quotes, total = cost1 + cost2 + bought + waste + finding;
+    return { full, rq, A, B, t1, t2, n1, n2, q1, q2, roots, finding, sized, waste, cost1, cost2, bought, total,
+             want1, want2, found1: want1 ? (n1 + q1) / want1 : 1, found2: want2 ? (n2 + q2) / want2 : 1,
+             found: want1 + want2 ? (n1 + q1 + n2 + q2) / (want1 + want2) : 1, foundPosts: A + B ? (gotA + gotB) / (A + B) : 1,
+             replies: t1.replies + t2.replies, downloaded: cost1 + cost2 + bought, posts: gotA + gotB, wanted: A + B,
+             streamRetweets: (o.stream || 0) * t2.allRetweets };
+  }
+
+  /* Share of cascades found and sized, by size: [{ lo, hi, n, found }] over bands of the population. */
+  function foundBySize(pop, o, edges) {
+    const out = edges.slice(0, -1).map((lo, i) => ({ lo, hi: edges[i + 1], n: 0, got: 0 }));
+    const need = (o.theta == null ? 0.5 : o.theta) * Math.min(o.rq, o.full), hits = Math.max(1, Math.ceil(need * (o.stream || 0.01)));
+    for (const r of pop.rows) {
+      if (r.skip) continue;
+      const b = out.find((x) => r.s >= x.lo && r.s < x.hi); if (!b) continue;
+      const cand = r.r0 >= o.fr || r.d0 >= o.fd;
+      const pv = !cand ? 0 : o.triage === 'all' ? 1 : o.triage === 'stream' ? binomSf(hits, Math.round(r.s), o.stream || 0.01) : (fromCounts(r.r0, r.d0, r.q0) >= need ? 1 : 0);
+      b.n += r.w; b.got += r.w * pv; b.cand = (b.cand || 0) + (cand ? r.w : 0);
+    }
+    return out.map((b) => ({ lo: b.lo, hi: b.hi, n: b.n, found: b.n ? b.got / b.n : null, returned: b.n ? (b.cand || 0) / b.n : null }));
   }
 
   /* Lowest value of `key` ('rq' or 'full') between lo and hi at which the plan costs no more than `budget`.
-     null if none does, or if the budget is not a positive number. An open upper limit means 100 million posts. */
+     null if none does, or if the budget is not a positive number. An open upper limit means the largest cascade. */
   function lowest(pop, o, key, budget, lo, hi) {
     if (!(budget > 0) || !(lo > 0)) return null;
-    if (!(hi < TOP)) hi = TOP;
+    const top = (pop.rows.length ? pop.rows[0].s : 1) + 1;
+    if (!(hi < top)) hi = top;
     const cost = (v) => plan(pop, Object.assign({}, o, { [key]: v })).total;
     if (cost(hi) > budget) return null;
     if (cost(lo) <= budget) return lo;
-    for (let i = 0; i < 60; i++) { const m = Math.sqrt(lo * hi); if (cost(m) > budget) lo = m; else hi = m; }
+    for (let i = 0; i < 40; i++) { const m = Math.sqrt(lo * hi); if (cost(m) > budget) lo = m; else hi = m; }
     return hi;
   }
 
-  const api = { DATA, BASE, population, plan, lowest, firstRetweets, binomSf };
+  const api = { DATA, TABLES: TAB, population, build, plan, lowest, foundBySize, fromCounts, binomSf };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.CASCADE = api;
 })(typeof self !== 'undefined' ? self : globalThis);

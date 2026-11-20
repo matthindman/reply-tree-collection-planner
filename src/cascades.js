@@ -5,23 +5,24 @@
   const U = PLANNER.ui, D = CASCADE.DATA, el = U.el, frame = U.frame, lin = U.lin, logS = U.logS, logTicks = U.logTicks, path = U.path, legend = U.legend, row = U.row, big = U.big, pct = U.pct, int = U.int;
 
   /* ====================================================================== defaults */
-  // Sizes come from CASCADE.DATA (cascade_model.js): counts for September 2026 on the full Japanese stream.
+  // The population is CASCADE.TABLES (cascade_tables.js): synthetic cascades of 100+ posts, simulated to match the 30 daily summaries for September 2026.
   const DEFAULTS = {
     cap: 1e8,            // units a month
     reserve: 1e7,        // kept back for daily spikes, the largest cascades and lookups
     window: 3,           // days after the root is posted
     month: 'September',  // which measured month the volumes follow
     change: 0,           // change in volume since that month (a 31-day month alone is +3%)
-    rt: 0.85,            // retweets as a share of posts (measured as 80 to 89%)
-    qt: 0.05,            // quotes as a share of posts (measured as about 5%)
     quoteRooted: true,   // count cascades rooted at a quote as well
+    replyLed: true,      // count reply-led cascades (their retweets hang from replies) as well
     full: 10000,         // tier 1: every post, for cascades of at least this many posts
     rqAuto: true, rq: 2500,   // tier 2: replies and quotes; rqAuto sets rq to the lowest size that fits
     rtMode: 'none', rtN: 100, rtRate: 0.03,   // retweets bought for tier 2
-    census: 100, passes: 3,   // tier 3: the root and its counts; the last pass is at the end of the window
+    fr: 1000, fd: 100,   // search floors on a root's own retweets and replies; a root passing either is returned
+    triage: 'counts', theta: 0.5,   // whose replies are read to size the cascade, and how likely it must look
+    passes: 3,           // search passes for each day of roots; the last is at the end of the window
     stream: 0.01,        // the sample stream, outside the cap
   };
-  const TIER = { full: 'var(--quiet)', rq: 'var(--root)', bought: 'var(--sample)', census: 'var(--both)', reserve: 'var(--ref)' };
+  const TIER = { full: 'var(--quiet)', rq: 'var(--root)', bought: 'var(--sample)', census: 'var(--both)', waste: 'var(--ink-3)', reserve: 'var(--ref)' };
   const KIND = ['var(--root)', 'var(--sample)', 'var(--both)'];
   let st = JSON.parse(JSON.stringify(DEFAULTS)), pop = null;
   const sz = (v) => int(v) + ' posts';
@@ -30,26 +31,29 @@
     { title: 'The contract', controls: [
       { key: 'cap', kind: 'log', label: 'Monthly cap, in units', min: 1e7, max: 1e9, fmt: big, hint: 'One unit is the charge for one post returned.' },
       { key: 'reserve', kind: 'range', label: 'Kept in reserve', min: 0, max: 3e7, step: 1e6, fmt: (v) => (v ? big(v) : 'none'), hint: 'For daily spikes, the largest cascades and lookups.' },
-      { key: 'window', kind: 'seg', label: 'Window after the root is posted', options: [[1, '1 day'], [2, '2 days'], [3, '3 days'], [7, '7 days']], hint: 'Posts after the window are not collected. One and two days are estimates: no post totals were measured for them.' },
+      { key: 'window', kind: 'seg', label: 'Window after the root is posted', options: [[1, '1 day'], [2, '2 days'], [3, '3 days'], [7, '7 days']], hint: 'Posts after the window are not collected. Sizes at each window are measured.' },
     ] },
     { title: 'Volumes', controls: [
       { key: 'month', kind: 'seg', label: 'A month like, in 2026', options: [['June', 'Jun'], ['July', 'Jul'], ['August', 'Aug'], ['September', 'Sep']], hint: 'Sizes were measured for September, the largest of the four. The others scale it by their total.' },
       { key: 'change', kind: 'range', label: 'Change in volume since then', min: -0.2, max: 0.5, step: 0.01, fmt: (v) => (v > 0 ? '+' : '') + Math.round(100 * v) + '%', hint: 'Volumes rose about 8% a month from July to September. A 31-day month adds 3%.' },
-      { key: 'rt', kind: 'range', label: 'Retweets, as a share of posts', min: 0.78, max: 0.91, step: 0.01, fmt: (v) => Math.round(100 * v) + '%', hint: 'Measured as 80 to 89%. Quotes are taken as 5% and replies as the rest.' },
-      { key: 'quoteRooted', kind: 'check', label: 'Count cascades rooted at a quote', hint: 'Their posts are measured, as lower bounds. Their number is estimated.' },
+      { key: 'quoteRooted', kind: 'check', label: 'Count cascades rooted at a quote', hint: 'Measured, as lower bounds: a quote late in its parent’s week was followed for less than seven days.' },
+      { key: 'replyLed', kind: 'check', label: 'Count reply-led cascades', hint: 'Cascades whose retweets hang from the replies, not the root: about a quarter of posts in September, from 11% to 35% by day. Their timing suggests automation; this is not confirmed. Unticked, they are returned by search but not collected.' },
       { kind: 'facts', id: 'c-facts' },
     ] },
     { title: 'What to collect', controls: [
       { key: 'full', kind: 'pick', label: 'Every post, for cascades of at least', choices: [5000, 6000, 7500, 10000, 12500, 15000, 20000, 30000, 50000, Infinity], fmt: (v) => (v === Infinity ? 'no cascade' : sz(v)) },
-      { key: 'rqAuto', kind: 'check', label: 'Take replies and quotes as low as fits' },
-      { key: 'rq', kind: 'log', label: 'Replies and quotes, for cascades of at least', min: 100, max: 20000, fmt: sz, disabled: () => st.rqAuto,
-        hint: 'Below 1,000 posts the sizes are rough.' },
+      { key: 'rqAuto', kind: 'check', label: 'Take replies and quotes as low as fits', hint: 'The lowest size that fits the budget, and no lower than the size at which at least 80% of the tier is found.' },
+      { key: 'rq', kind: 'log', label: 'Replies and quotes, for cascades of at least', min: 100, max: 20000, fmt: sz, disabled: () => st.rqAuto },
       { key: 'rtMode', kind: 'seg', label: 'Retweets for those cascades', options: [['none', 'Stream only'], ['first', 'First N'], ['sample', 'Sample']],
         hint: 'The 1% stream shows a random 1% of retweets at no cost. First N and Sample buy more.' },
       { key: 'rtN', kind: 'pick', label: 'Retweets read from each cascade', choices: [50, 100, 250, 500, 1000], fmt: (v) => 'first ' + int(v), disabled: () => st.rtMode !== 'first' },
       { key: 'rtRate', kind: 'range', label: 'Random share of retweets bought', min: 0.01, max: 0.3, step: 0.01, fmt: (v) => Math.round(100 * v) + '%', disabled: () => st.rtMode !== 'sample' },
-      { key: 'census', kind: 'pick', label: 'Root and counts, for cascades of at least', choices: [100, 200, 300, 500, 1000], fmt: sz,
-        hint: 'Search filters on a root’s own retweet or reply count. How well that matches a cascade’s size has not been measured.' },
+      { key: 'fr', kind: 'pick', label: 'Search floor on a root’s own retweets', choices: [100, 300, 500, 1000, 2000, 3000, 5000], fmt: (v) => int(v) + ' retweets' },
+      { key: 'fd', kind: 'pick', label: 'Search floor on a root’s own replies', choices: [50, 100, 150, 200, 300, 500, Infinity], fmt: (v) => (v === Infinity ? 'not used' : int(v) + ' replies'),
+        hint: 'Search returns a root that passes either floor. Reply-led cascades are found only through the floor on replies.' },
+      { key: 'triage', kind: 'seg', label: 'Read the replies of', options: [['counts', 'Likely, by counts'], ['stream', 'Likely, by stream'], ['all', 'Every root']],
+        hint: 'Replies carry their own counts, so reading them gives a cascade’s size. They cost a unit each even when the cascade turns out too small. By counts: the size is read off the root’s own counts. By stream: off the cascade’s posts in the 1% sample, which needs each sampled post matched to its cascade.' },
+      { key: 'theta', kind: 'range', label: 'Likely means an estimated size of at least', min: 0.2, max: 1, step: 0.05, fmt: (v) => Math.round(100 * v) + '% of the second tier', disabled: () => st.triage === 'all' },
       { key: 'passes', kind: 'range', label: 'Search passes for each day of roots', min: 1, max: 3, step: 1, fmt: (v) => { const n = Math.min(v, st.window); return n === 1 ? 'once' : n === 2 ? 'twice' : '3 times'; }, hint: 'The last pass is at the end of the window, earlier ones at 24 and 48 hours, so a one-day window has one pass. Each pass returns every root again.' },
     ] },
   ];
@@ -98,43 +102,54 @@
 
   /* ====================================================================== the plan */
   const nPass = () => Math.min(st.passes, st.window);   // a pass a day at most
-  const opts = (over) => Object.assign({ full: st.full, rq: st.rq, census: st.census, passes: nPass(), rt: st.rt, qt: st.qt, rtMode: st.rtMode, rtN: st.rtN, rtRate: st.rtRate, stream: st.stream }, over || {});
+  const opts = (over) => Object.assign({ full: st.full, rq: st.rq, passes: nPass(), fr: st.fr, fd: st.fd, triage: st.triage, theta: st.theta, rtMode: st.rtMode, rtN: st.rtN, rtRate: st.rtRate, stream: st.stream }, over || {});
   const budget = () => Math.max(0, st.cap - st.reserve);
+  const FOUND_MIN = 0.8;   // the automatic second tier stops where search finds less than this share of it
   const roundUp = (v) => { const p = v < 1000 ? 10 : v < 10000 ? 50 : v < 100000 ? 500 : 5000; return Math.ceil(v / p - 1e-9) * p; };
   const top2 = () => (st.full === Infinity ? 1e6 : st.full);
   function derive() {
-    pop = CASCADE.population({ scale: D.months[st.month] * (1 + st.change), window: st.window, quoteRooted: st.quoteRooted });
-    if (st.rqAuto) { const e = CASCADE.lowest(pop, opts(), 'rq', budget(), st.census, top2()); st.rq = e == null ? top2() : Math.min(top2(), roundUp(e)); }
-    else st.rq = Math.max(st.rq, st.census);   // a cascade in the second tier has to be found
+    pop = CASCADE.population({ scale: D.months[st.month] * (1 + st.change), window: st.window, quoteRooted: st.quoteRooted, replyLed: st.replyLed });
+    if (st.rqAuto) {
+      // the lowest size that fits, and no lower than search finds: at least FOUND_MIN of the tier
+      let e = CASCADE.lowest(pop, opts(), 'rq', budget(), 100, top2());
+      if (e != null) { const ok = (v) => { const r = CASCADE.plan(pop, opts({ rq: v })); return r.want2 === 0 || r.found2 >= FOUND_MIN; };
+        if (!ok(e)) { let lo = e, hi = top2(); if (ok(hi * 0.999)) { for (let i = 0; i < 30; i++) { const m = Math.sqrt(lo * hi); if (ok(m)) hi = m; else lo = m; } e = hi; } else e = null; } }
+      st.rq = e == null ? top2() : Math.min(top2(), roundUp(e));
+    }
   }
   const passAges = () => { const end = 24 * st.window, n = nPass(); return n === 1 ? [end] : n === 2 ? [24, end] : [24, 48, end]; };
   const ageTxt = (h) => (h % 24 === 0 && h > 72 ? h / 24 + ' days' : h + ' hours');
   const agesTxt = () => { const a = passAges(); return a.every((h) => h <= 72) ? list(a.map(String)) + ' hours' : list(a.map(ageTxt)); };
   const list = (a) => (a.length < 2 ? a.join('') : a.slice(0, -1).join(', ') + ' and ' + a[a.length - 1]);
   const bought = () => (st.rtMode === 'first' ? 'the first ' + int(st.rtN) + ' retweets of each' : st.rtMode === 'sample' ? 'a random ' + Math.round(100 * st.rtRate) + '% of their retweets' : '');
+  const floorsTxt = () => int(st.fr) + ' retweets' + (st.fd === Infinity ? '' : ' or ' + int(st.fd) + ' replies') + ' of their own';
+  const bar = (r) => int(roundUp(st.theta * r.rq));
   function recipe(r, hasT1, hasT2) {
-    const parts = ['Each day, search for roots posted ' + agesTxt() + ' earlier whose retweet or reply count is high enough for a cascade of ' + int(r.census) + '+ posts.',
-      'Start collecting a cascade the first time its counts pass its size. Fetch its replies first: each carries its own counts, which gives a closer size.'];
+    const parts = ['Each day, search for roots posted ' + agesTxt() + ' earlier that have at least ' + floorsTxt() + '.',
+      st.triage === 'all' ? 'Read the replies of every root returned: each reply carries its own counts, and their sum is the cascade’s size.'
+        : st.triage === 'stream' ? 'Where the 1% stream holds enough of a cascade’s posts to suggest ' + bar(r) + '+ posts, read its replies: each carries its own counts, and their sum is the cascade’s size.'
+        : 'Where a root’s counts suggest a cascade of ' + bar(r) + '+ posts, read its replies: each carries its own counts, and their sum is the cascade’s size.'];
     if (hasT1) parts.push('For cascades of ' + int(st.full) + '+ posts, fetch every quote and retweet.');
     if (hasT2) parts.push('For cascades of ' + int(r.rq) + '+ posts, fetch the quotes' + (st.rtMode === 'none' ? '; their retweets come from the 1% stream only.' : ' and ' + bought() + '.'));
-    parts.push('Check what search found against the 1% stream: search by counts can miss a cascade whose size is spread over many replies.');
+    parts.push('This finds ' + pct(r.found) + ' of the cascades wanted. Check what search found against the 1% stream.');
     return parts.join(' ');
   }
 
   /* ====================================================================== figures */
   function drawFlow(r, hasT1, hasT2, fits) {
     const host = document.getElementById('c-flow'), wide = host.clientWidth >= 820, BH = 90, uid = 'cf' + (drawFlow.n = (drawFlow.n || 0) + 1);
-    const col = fits ? 'var(--ok)' : 'var(--over)', got = r.posts ? r.downloaded / r.posts : 0;
+    const col = fits ? 'var(--ok)' : 'var(--over)';
+    const how = st.triage === 'all' ? 'every root returned' : st.triage === 'stream' ? 'likely ones, by stream' : 'likely ones, by counts';
     const boxes = [
-      { title: 'Search by counts', color: TIER.census, lines: [nPass() === 1 ? 'one pass, at ' + ageTxt(passAges()[0]) : 'at ' + (st.window <= 3 ? agesTxt() : passAges().map((h) => (h > 72 ? h / 24 + ' d' : h + ' h')).join(', ')), big(r.roots) + ' roots of ' + int(r.census) + '+', 'costs ' + big(r.finding) + ' units'] },
-      { title: 'Replies first', lines: ['each reply carries its counts', big(r.replies) + ' replies', 'costs ' + big(r.replies) + ' units'] },
-      hasT1 ? { title: 'In full, ' + int(st.full) + '+', color: TIER.full, lines: ['every quote and retweet', big(r.n1) + ' cascades', 'costs ' + big(r.t1.quotes + r.t1.retweets) + ' units'] }
+      { title: 'Search by counts', color: TIER.census, lines: [nPass() === 1 ? 'one pass, at ' + ageTxt(passAges()[0]) : 'at ' + (st.window <= 3 ? agesTxt() : passAges().map((h) => (h > 72 ? h / 24 + ' d' : h + ' h')).join(', ')), big(r.roots) + ' roots returned', 'costs ' + big(r.finding) + ' units'] },
+      { title: 'Read replies to size', color: TIER.waste, lines: [how, big(r.sized) + ' cascades sized', big(r.waste) + ' units on small ones'] },
+      hasT1 ? { title: 'In full, ' + int(st.full) + '+', color: TIER.full, lines: ['every post', big(r.n1 + r.q1) + ' cascades', 'costs ' + big(r.cost1) + ' units'] }
             : { title: 'No cascade in full', dashed: true, lines: ['no size chosen', 'for every post', 'costs nothing'] },
-      hasT2 ? { title: 'Quotes, ' + int(r.rq) + '+', color: TIER.rq, lines: [st.rtMode === 'none' ? 'retweets: 1% stream only' : st.rtMode === 'first' ? 'and first ' + int(st.rtN) + ' retweets' : 'and ' + Math.round(100 * st.rtRate) + '% of retweets', big(r.n2) + ' cascades', 'costs ' + big(r.t2.quotes + r.bought) + ' units'] }
-            : { title: 'No second tier', dashed: true, lines: hasT1 ? ['replies and quotes only', 'for the cascades in full', 'costs nothing'] : ['nothing fits', 'under this cap', 'costs nothing'] },
-      { title: 'Collected', color: col, fill: true, lines: [big(r.n1 + r.n2) + ' cascades a month', pct(got) + ' of their posts', big(r.total) + ' units, ' + pct(r.total / st.cap) + ' of cap'] },
+      hasT2 ? { title: 'Replies, quotes, ' + int(r.rq) + '+', color: TIER.rq, lines: [st.rtMode === 'none' ? 'retweets: 1% stream only' : st.rtMode === 'first' ? 'and first ' + int(st.rtN) + ' retweets' : 'and ' + Math.round(100 * st.rtRate) + '% of retweets', big(r.n2 + r.q2) + ' cascades', 'costs ' + big(r.cost2 + r.bought) + ' units'] }
+            : { title: 'No second tier', dashed: true, lines: hasT1 ? ['nothing below', 'the cascades in full', 'costs nothing'] : ['nothing fits', 'under this cap', 'costs nothing'] },
+      { title: 'Collected', color: col, fill: true, lines: [big(r.n1 + r.q1 + r.n2 + r.q2) + ' cascades a month', pct(r.found) + ' of those wanted', big(r.total) + ' units, ' + pct(r.total / st.cap) + ' of cap'] },
     ];
-    const f = frame('c-flow', wide ? BH + 34 : boxes.length * BH + (boxes.length - 1) * 24 + 10, 'The plan as a flow: search by counts, replies first, leaves for each tier, result');
+    const f = frame('c-flow', wide ? BH + 34 : boxes.length * BH + (boxes.length - 1) * 24 + 10, 'The plan as a flow: search by counts, replies read to size, each tier, result');
     const defs = el('defs', {}, f.svg), mk = el('marker', { id: uid, viewBox: '0 0 10 10', refX: 9, refY: 5, markerWidth: 7, markerHeight: 7, orient: 'auto-start-reverse' }, defs);
     el('path', { d: 'M0 0L10 5L0 10z', fill: 'var(--ink-3)' }, mk);
     const box = (b, x, y, w) => {
@@ -150,7 +165,7 @@
   }
 
   function drawCap(r, fits) {
-    const segs = [['Cascades in full', r.cost1, TIER.full], ['Replies and quotes', r.cost2, TIER.rq], ['Retweets bought', r.bought, TIER.bought], ['Search by counts', r.finding, TIER.census], ['Reserve', st.reserve, TIER.reserve]].filter((x) => x[1] > 0);
+    const segs = [['Cascades in full', r.cost1, TIER.full], ['Replies and quotes', r.cost2, TIER.rq], ['Retweets bought', r.bought, TIER.bought], ['Replies of cascades too small', r.waste, TIER.waste], ['Search by counts', r.finding, TIER.census], ['Reserve', st.reserve, TIER.reserve]].filter((x) => x[1] > 0);
     const f = frame('c-cap', 86, 'Units a month by use, against the cap'), x0 = 2, x1 = f.w - 2, used = r.total + st.reserve, max = Math.max(st.cap, used) * 1.02, X = lin(0, max, x0, x1), y = 30, h = 26;
     el('rect', { x: x0, y, width: X(st.cap) - x0, height: h, rx: 4, fill: 'var(--sunken)' }, f.svg);
     let at = 0;
@@ -170,9 +185,9 @@
 
   function drawTiers(r, hasT1, hasT2) {
     const rows = [];
-    if (hasT1) rows.push(['In full', int(st.full) + '+ posts', r.A, r.cost1, TIER.full, r.n1, 'every post']);
-    if (hasT2) rows.push(['Replies and quotes', int(r.rq) + ' to ' + (st.full === Infinity ? 'the largest' : int(st.full - 1)), r.B, r.cost2 + r.bought, TIER.rq, r.n2, st.rtMode === 'none' ? 'no retweets bought' : 'with ' + big(r.bought) + ' retweets']);
-    if (r.n3 > 0) rows.push(['Root and counts', int(r.census) + ' to ' + int(r.rq - 1), r.censusPosts, r.n3 + r.q3, TIER.census, r.n3, 'the root only, charged on each pass']);
+    if (hasT1) rows.push(['In full', int(st.full) + '+ posts', r.A, r.cost1, TIER.full, r.n1 + r.q1, pct(r.found1) + ' of ' + big(r.want1) + ' found']);
+    if (hasT2) rows.push(['Replies and quotes', int(r.rq) + ' to ' + (st.full === Infinity ? 'the largest' : int(st.full - 1)), r.B, r.cost2 + r.bought, TIER.rq, r.n2 + r.q2, pct(r.found2) + ' of ' + big(r.want2) + ' found' + (st.rtMode === 'none' ? '' : ', with ' + big(r.bought) + ' retweets')]);
+    if (!rows.length) rows.push(['Nothing collected', 'no tier chosen', 1, 0, TIER.reserve, 0, '']);
     const rowH = 50, f = frame('c-mix', rows.length * rowH + 34, 'Posts in each tier and how many of them are downloaded');
     const wide = f.w >= 620, m = { l: wide ? 150 : 4, r: wide ? 232 : 64, t: 4 }, x0 = m.l, x1 = f.w - m.r, max = Math.max.apply(null, rows.map((x) => x[2])), X = lin(0, max, x0, x1), yb = m.t + rows.length * rowH;
     rows.forEach(([name, range, all, got, col, n, note], i) => {
@@ -183,26 +198,24 @@
       el('rect', { x: x0, y: top, width: Math.max(1.5, X(got) - x0), height: 22, rx: 3, fill: col }, f.svg);
       const t = el('text', { x: X(all) + 8, y: top + 15 }, f.svg); el('tspan', { class: 'strong', style: 'fill:var(--ink)' }, t, big(all)); if (wide) el('tspan', {}, t, '  ' + big(n) + ' cascades, ' + note);
       const hit = el('rect', { x: 0, y, width: f.w, height: rowH, fill: 'transparent' }, f.svg);
-      hit.addEventListener('pointermove', (ev) => { const b = f.svg.getBoundingClientRect(); f.showTip(ev.clientX - b.left, ev.clientY - b.top, '<b>' + name + ' · ' + range + '</b>' + row('', 'Cascades a month', big(n)) + row('', 'Posts in them', big(all)) + row(col, 'Downloaded', big(got) + ' · ' + pct(all ? got / all : 0))); });
+      hit.addEventListener('pointermove', (ev) => { const b = f.svg.getBoundingClientRect(); f.showTip(ev.clientX - b.left, ev.clientY - b.top, '<b>' + name + ' · ' + range + '</b>' + row('', 'Cascades found a month', big(n)) + row('', 'Posts in the tier, found or not', big(all)) + row(col, 'Downloaded', big(got) + ' · ' + pct(all ? got / all : 0))); });
       hit.addEventListener('pointerleave', f.hideTip);
     });
     el('line', { x1: x0, x2: x1, y1: yb, y2: yb, stroke: 'var(--line-2)' }, f.svg);
     const step = U.niceStep(max / 4);
     for (let v = 0; v <= max * 1.001; v += step) { el('line', { x1: X(v), x2: X(v), y1: yb, y2: yb + 5, stroke: 'var(--line-2)' }, f.svg); el('text', { x: X(v), y: yb + 18, 'text-anchor': v === 0 ? 'start' : 'middle', class: 'tick' }, f.svg, v === 0 ? '0' : big(v)); }
     el('text', { x: x1, y: f.h - 2, 'text-anchor': 'end' }, f.svg, 'posts a month');
-    legend('c-leg-mix', [['box', 'var(--ink-2)', 'Downloaded'], ['box', 'var(--ink-2)', 'In the tier, not downloaded', 'opacity:.2']]);
+    legend('c-leg-mix', [['box', 'var(--ink-2)', 'Downloaded'], ['box', 'var(--ink-2)', 'In the tier, not downloaded or not found', 'opacity:.2']]);
   }
 
   function drawFit(r, hasT2) {
-    const f = frame('c-fit', 330, 'Units a month against the smallest cascade collected, with the measured sizes');
+    const f = frame('c-fit', 330, 'Units a month against the smallest cascade collected');
     const m = { l: 46, r: 16, t: 20, b: 42 }, x0 = m.l, x1 = f.w - m.r, y0 = f.h - m.b, y1 = m.t, lo = 100, hi = 100000;
-    const every = (s) => pop.P(s), rq = (s) => (1 - st.rt) * pop.P(s), mine = (s) => CASCADE.plan(pop, opts({ rq: s })).total;
+    const every = (s) => pop.P(s), rq = (s) => pop.RQ(s), mine = (s) => CASCADE.plan(pop, opts({ rq: s })).total;
     const xs = []; for (let i = 0; i <= 120; i++) xs.push(lo * Math.pow(hi / lo, i / 120));
-    const mineXs = xs.filter((x) => x >= st.census && x <= top2());
+    const mineXs = xs.filter((x) => x <= top2());
     const all = xs.map(every).concat(xs.map(rq), [st.cap]), X = logS(lo, hi, x0, x1), Y = logS(Math.min.apply(null, all) / 1.4, Math.max.apply(null, all) * 1.4, y0, y1);
     el('rect', { x: x0, y: y1, width: x1 - x0, height: Math.max(0, Y(st.cap) - y1), fill: 'var(--over)', 'fill-opacity': 0.05 }, f.svg);
-    el('rect', { x: x0, y: y1, width: X(1000) - x0, height: y0 - y1, fill: 'var(--sunken)', 'fill-opacity': 0.7 }, f.svg);
-    el('text', { x: x0 + 8, y: y0 - 10 }, f.svg, 'below 1,000: rough');
     for (const v of logTicks(Y.inv(y0), Y.inv(y1))) { el('line', { x1: x0, x2: x1, y1: Y(v), y2: Y(v), stroke: 'var(--grid)' }, f.svg); el('text', { x: x0 - 8, y: Y(v) + 4, 'text-anchor': 'end', class: 'tick' }, f.svg, big(v)); }
     for (const v of [100, 1000, 10000, 100000]) { el('line', { x1: X(v), x2: X(v), y1: y0, y2: y0 + 5, stroke: 'var(--line-2)' }, f.svg); el('text', { x: X(v), y: y0 + 18, 'text-anchor': v === hi ? 'end' : 'middle', class: 'tick' }, f.svg, int(v)); }
     el('line', { x1: x0, x2: x1, y1: y0, y2: y0, stroke: 'var(--line-2)' }, f.svg);
@@ -220,12 +233,12 @@
     ov.addEventListener('pointermove', (ev) => {
       const b = f.svg.getBoundingClientRect(), px = (ev.clientX - b.left) * f.w / b.width, s = +X.inv(px).toPrecision(2);
       cross.setAttribute('x1', px); cross.setAttribute('x2', px); cross.setAttribute('visibility', 'visible');
-      f.showTip(px * b.width / f.w, ev.clientY - b.top, '<b>Cascades of ' + int(s) + '+ posts' + (s < 1000 ? ' (rough)' : '') + '</b>' + row('', 'How many a month', big(pop.N(s)))
+      f.showTip(px * b.width / f.w, ev.clientY - b.top, '<b>Cascades of ' + int(s) + '+ posts</b>' + row('', 'How many a month', big(pop.N(s)))
         + row(TIER.full, 'Every post', big(every(s)) + ' units') + row(TIER.rq, 'Replies and quotes', big(rq(s)) + ' units')
-        + (s >= st.census && s <= top2() ? row('var(--ink)', 'Your plan, second tier from here', big(mine(s)) + ' units') : ''));
+        + (s <= top2() ? row('var(--ink)', 'Your plan, second tier from here', big(mine(s)) + ' units') : ''));
     });
     ov.addEventListener('pointerleave', () => { cross.setAttribute('visibility', 'hidden'); f.hideTip(); });
-    legend('c-leg-fit', [['', TIER.full, 'Every post, from this size up'], ['', TIER.rq, 'Replies and quotes, from this size up'], ['', 'var(--ink)', 'Your plan, as its second tier reaches lower'], ['dot', 'var(--ink-2)', 'At the measured sizes']]);
+    legend('c-leg-fit', [['', TIER.full, 'Every post, from this size up'], ['', TIER.rq, 'Replies and quotes, from this size up'], ['', 'var(--ink)', 'Your plan, as its second tier reaches lower'], ['dot', 'var(--ink-2)', 'At 1,000, 5,000, 10,000 and 20,000 posts']]);
   }
 
   function drawGrow() {
@@ -250,78 +263,81 @@
   }
 
   function drawFind() {
-    const f = frame('c-find', 310, 'Chance that a cascade is found, by its size: the 1% stream, and the most that search by counts can find');
-    const m = { l: 44, r: 16, t: 24, b: 42 }, x0 = m.l, x1 = f.w - m.r, y0 = f.h - m.b, y1 = m.t, X = logS(10, 10000, x0, x1), Y = lin(0, 1, y0, y1);
+    const f = frame('c-find', 310, 'Share of cascades returned by search and sized, by size, with the chance that the 1% stream samples at least one post');
+    const m = { l: 44, r: 16, t: 24, b: 42 }, x0 = m.l, x1 = f.w - m.r, y0 = f.h - m.b, y1 = m.t, LO = 100, HI = 100000, X = logS(LO, HI, x0, x1), Y = lin(0, 1, y0, y1);
     for (const v of [0, 0.25, 0.5, 0.75, 1]) { el('line', { x1: x0, x2: x1, y1: Y(v), y2: Y(v), stroke: 'var(--grid)' }, f.svg); el('text', { x: x0 - 8, y: Y(v) + 4, 'text-anchor': 'end', class: 'tick' }, f.svg, Math.round(100 * v) + '%'); }
-    for (const v of [10, 100, 1000, 10000]) { el('line', { x1: X(v), x2: X(v), y1: y0, y2: y0 + 5, stroke: 'var(--line-2)' }, f.svg); el('text', { x: X(v), y: y0 + 18, 'text-anchor': v === 10000 ? 'end' : 'middle', class: 'tick' }, f.svg, int(v)); }
+    for (const v of [100, 1000, 10000, 100000]) { el('line', { x1: X(v), x2: X(v), y1: y0, y2: y0 + 5, stroke: 'var(--line-2)' }, f.svg); el('text', { x: X(v), y: y0 + 18, 'text-anchor': v === HI ? 'end' : 'middle', class: 'tick' }, f.svg, int(v)); }
     el('line', { x1: x0, x2: x1, y1: y0, y2: y0, stroke: 'var(--line-2)' }, f.svg);
     el('text', { x: (x0 + x1) / 2, y: f.h - 6, 'text-anchor': 'middle' }, f.svg, 'Cascade size, in posts (log scale)');
-    const xs = []; for (let i = 0; i <= 120; i++) xs.push(10 * Math.pow(1000, i / 120));
-    const series = [[1, 'var(--ink)', 2.75, null], [3, 'var(--ref)', 1.5, '5 4']];
-    series.forEach(([h, col, w, dash]) => el('path', { d: path(xs.map((x) => [X(x), Y(CASCADE.binomSf(h, Math.round(x), st.stream))])), fill: 'none', stroke: col, 'stroke-width': w, 'stroke-dasharray': dash }, f.svg));
-    el('path', { d: 'M' + X(st.census) + ' ' + y0 + 'V' + Y(1) + 'H' + x1, fill: 'none', stroke: TIER.census, 'stroke-width': 2.25, 'stroke-dasharray': '6 4', 'stroke-linejoin': 'round' }, f.svg);
-    el('text', { x: X(st.census) + 8, y: Y(1) - 8, class: 'strong' }, f.svg, 'search by counts, at most');
+    const edges = []; for (let i = 0; i <= 12; i++) edges.push(LO * Math.pow(HI / LO, i / 12)); edges[12] = 1e9;
+    const o = opts(), bands = CASCADE.foundBySize(pop, Object.assign({}, o, { rq: Math.min(o.rq, o.full) }), edges).filter((b) => b.found != null), mid = (b) => Math.sqrt(b.lo * Math.min(b.hi, HI));
+    const xs = []; for (let i = 0; i <= 90; i++) xs.push(LO * Math.pow(HI / LO, i / 90));
+    el('path', { d: path(xs.map((x) => [X(x), Y(CASCADE.binomSf(1, Math.round(x), st.stream))])), fill: 'none', stroke: 'var(--ref)', 'stroke-width': 1.5, 'stroke-dasharray': '5 4' }, f.svg);
+    const series = [['returned', TIER.census, 2, 'Returned by search'], ['found', 'var(--ink)', 2.75, 'Returned and sized']];
+    series.forEach(([k, col, w]) => { el('path', { d: path(bands.map((b) => [X(mid(b)), Y(b[k])])), fill: 'none', stroke: col, 'stroke-width': w, 'stroke-linejoin': 'round' }, f.svg);
+      bands.forEach((b) => el('circle', { cx: X(mid(b)), cy: Y(b[k]), r: 3.5, fill: col, stroke: 'var(--surface)', 'stroke-width': 2 }, f.svg)); });
+    if (st.rq < top2()) { el('line', { x1: X(st.rq), x2: X(st.rq), y1: y1, y2: y0, stroke: TIER.rq, 'stroke-dasharray': '2 4' }, f.svg); el('text', { x: X(st.rq) + 6, y: y0 - 8, style: 'fill:var(--ink)' }, f.svg, 'second tier from ' + int(st.rq)); }
     const cross = el('line', { y1: y1, y2: y0, stroke: 'var(--ink-3)', visibility: 'hidden' }, f.svg), ov = el('rect', { x: x0, y: y1, width: x1 - x0, height: y0 - y1, fill: 'transparent' }, f.svg);
     ov.addEventListener('pointermove', (ev) => {
-      const b = f.svg.getBoundingClientRect(), px = (ev.clientX - b.left) * f.w / b.width, s = Math.round(X.inv(px));
-      cross.setAttribute('x1', px); cross.setAttribute('x2', px); cross.setAttribute('visibility', 'visible');
-      f.showTip(px * b.width / f.w, ev.clientY - b.top, '<b>A cascade of ' + int(s) + ' posts</b>' + row(TIER.census, 'Search by counts', s >= st.census ? 'if its root’s count passes' : 'below the size searched')
-        + series.map(([h, col]) => row(col, 'Stream, ' + h + (h === 1 ? ' sampled post' : ' sampled posts'), pct(CASCADE.binomSf(h, s, st.stream)))).join(''));
+      const b = f.svg.getBoundingClientRect(), px = (ev.clientX - b.left) * f.w / b.width; let j = 0; bands.forEach((q, i) => { if (Math.abs(X(mid(q)) - px) < Math.abs(X(mid(bands[j])) - px)) j = i; });
+      const q = bands[j]; if (!q) return;
+      cross.setAttribute('x1', X(mid(q))); cross.setAttribute('x2', X(mid(q))); cross.setAttribute('visibility', 'visible');
+      f.showTip(X(mid(q)) * b.width / f.w, ev.clientY - b.top, '<b>Cascades of ' + int(roundUp(q.lo)) + (q.hi > HI ? '+' : ' to ' + int(roundUp(q.hi))) + ' posts</b>' + row('', 'How many a month', big(q.n))
+        + row(TIER.census, 'Returned by search', pct(q.returned)) + row('var(--ink)', 'Returned and sized', pct(q.found)) + row('var(--ref)', 'Stream samples a post', pct(CASCADE.binomSf(1, Math.round(mid(q)), st.stream))));
     });
     ov.addEventListener('pointerleave', () => { cross.setAttribute('visibility', 'hidden'); f.hideTip(); });
-    legend('c-leg-find', [['', TIER.census, 'Search by counts, at most'], ['', 'var(--ink)', '1% stream, one sampled post'], ['', 'var(--ref)', '1% stream, three sampled posts']]);
+    legend('c-leg-find', [['', TIER.census, 'Returned by search'], ['', 'var(--ink)', 'Returned and sized'], ['', 'var(--ref)', '1% stream samples at least one post']]);
   }
 
   /* ====================================================================== render */
   function render() {
     if (!pop) derive();
-    const hasT1 = st.full !== Infinity, hasT2 = st.rq < top2(), r = CASCADE.plan(pop, opts(hasT2 ? {} : { rq: Infinity })), fits = r.total <= budget() + 1, S = D.streamOnly;
+    const hasT1 = st.full !== Infinity, hasT2 = st.rq < top2(), r = CASCADE.plan(pop, opts(hasT2 ? {} : { rq: Infinity })), fits = r.total <= budget() + 1, c1 = r.n1 + r.q1, c2 = r.n2 + r.q2;
     document.getElementById('c-facts').innerHTML = [
-      ['Cascades of 1,000+ a month', big(pop.N(1000))],
+      ['Cascades of 1,000+ a month', big(pop.NA(1000))],
       ['Posts in them', big(pop.P(1000))],
-      ['Cascades of 10,000+ a month', big(pop.N(10000))],
+      ['Replies and quotes among those posts', pct(pop.RQ(1000) / pop.P(1000))],
+      ['Cascades of 10,000+ a month', big(pop.NA(10000))],
       ['Their share of those posts', pct(pop.P(10000) / pop.P(1000))],
-      ['Cascades of 100+ a month, rough', big(pop.N(100))],
-    ].concat(st.quoteRooted ? [['Rooted at a quote, 1,000+, estimated', big(pop.NQ(1000))]] : []).map(([k, v]) => '<dt>' + k + '</dt><dd>' + v + '</dd>').join('');
+      ['Cascades of 100+ a month', big(pop.NA(100))],
+    ].concat(st.quoteRooted ? [['Of the 1,000+, rooted at a quote', big(pop.NQ(1000))]] : [], st.replyLed ? [['Posts at 1,000+ in reply-led cascades', pct(pop.LedPosts(1000) / pop.P(1000))]] : []).map(([k, v]) => '<dt>' + k + '</dt><dd>' + v + '</dd>').join('');
     const pill = document.getElementById('c-pill'); pill.className = 'pill ' + (fits ? 'ok' : 'short'); pill.textContent = fits ? 'Fits the cap' : 'Over the cap';
     const rqWords = st.rtMode === 'first' ? 'replies, quotes and first ' + int(st.rtN) + ' retweets' : st.rtMode === 'sample' ? 'replies, quotes and a random ' + Math.round(100 * st.rtRate) + '% of the retweets' : 'replies and quotes';
-    const subject = hasT1 && hasT2 ? 'Every post of the ' + big(r.n1) + ' cascades of ' + int(st.full) + '+ posts, and the ' + rqWords + ' of ' + big(r.n2) + ' more down to ' + int(r.rq) + ' posts,'
-      : hasT1 ? 'Every post of the ' + big(r.n1) + ' cascades of ' + int(st.full) + '+ posts'
-      : hasT2 ? 'The ' + rqWords + ' of the ' + big(r.n2) + ' cascades of ' + int(r.rq) + '+ posts'
+    const subject = hasT1 && hasT2 ? 'Every post of ' + big(c1) + ' cascades of ' + int(st.full) + '+ posts, and the ' + rqWords + ' of ' + big(c2) + ' more down to ' + int(r.rq) + ' posts,'
+      : hasT1 ? 'Every post of ' + big(c1) + ' cascades of ' + int(st.full) + '+ posts'
+      : hasT2 ? 'The ' + rqWords + ' of ' + big(c2) + ' cascades of ' + int(r.rq) + '+ posts'
       : 'Search by counts alone';
     const plural = hasT2;
     document.getElementById('c-headline').textContent = subject + (fits ? (plural ? ' cost ' : ' costs ') + big(r.total) + ' units a month, ' + pct(r.total / st.cap) + ' of the cap.'
       : (plural ? ' need ' : ' needs ') + big(r.total) + ' units a month, ' + (budget() > 0 ? 'more than the ' + big(budget()) + ' available.' : 'and the reserve takes the whole cap.'));
     let fix = '';
     if (!fits) {
-      const e = CASCADE.lowest(pop, opts(), 'rq', budget(), st.census, top2()), g = CASCADE.lowest(pop, opts({ rq: Infinity }), 'full', budget(), 1000, 1e6);
+      const e = CASCADE.lowest(pop, opts(), 'rq', budget(), 100, top2()), g = CASCADE.lowest(pop, opts({ rq: Infinity }), 'full', budget(), 1000, 1e6);
       fix = e != null ? ' Replies and quotes fit from about ' + int(roundUp(e)) + '+ posts.' : g != null ? ' Every post alone fits only from about ' + int(roundUp(g)) + '+ posts.' : '';
     }
-    if (hasT2 && r.rq < 1000) fix += ' Sizes below 1,000 posts are rough.';
-    if (pop.windowRough) fix += ' A ' + (st.window === 1 ? 'one' : 'two') + '-day window collects about ' + pct(pop.shrink) + ' of the posts these cascades have in seven days, and ' + pct(D.window[st.window].keep) + ' of the seven-day cascades of 10,000+ reach 10,000 in it. ' + (st.window === 1 ? 'The first figure is an estimate.' : 'Both figures are estimates.');
+    if (st.window < 7) fix += ' A ' + ['', 'one', 'two', 'three'][st.window] + '-day window holds ' + pct(pop.share) + ' of the posts these cascades have in seven days, and ' + pct(D.passed10k[24 * st.window]) + ' of the seven-day cascades of 10,000+ reach 10,000 in it.';
     document.getElementById('c-recipe').textContent = recipe(r, hasT1, hasT2) + fix;
-    const more = (q) => (q >= 0.5 ? '; about ' + big(+q.toPrecision(2)) + ' more rooted at a quote' : '');
     const k = [
-      ['Cascades collected in full', hasT1 ? big(r.n1) : 'none', hasT1 ? int(st.full) + '+ posts; ' + big(r.cost1) + ' units' + more(r.q1) : 'no size chosen'],
-      [st.rtMode === 'none' ? 'With replies and quotes only' : 'With replies, quotes and some retweets', hasT2 ? big(r.n2) : 'none', hasT2 ? 'down to ' + int(r.rq) + ' posts; ' + big(r.cost2 + r.bought) + ' units' + more(r.q2) : 'no second tier'],
+      ['Cascades collected in full', hasT1 ? big(c1) : 'none', hasT1 ? int(st.full) + '+ posts; ' + big(r.cost1) + ' units; ' + pct(r.found1) + ' of them found' : 'no size chosen'],
+      [st.rtMode === 'none' ? 'With replies and quotes only' : 'With replies, quotes and some retweets', hasT2 ? big(c2) : 'none', hasT2 ? 'down to ' + int(r.rq) + ' posts; ' + big(r.cost2 + r.bought) + ' units; ' + pct(r.found2) + ' of them found' : 'no second tier'],
       ['Units spent a month', big(r.total), pct(r.total / st.cap) + ' of the cap' + (st.reserve ? '; ' + big(st.reserve) + ' in reserve' : '')],
-      ['Cascades with their reply trees', big(r.n1 + r.n2), 'if search finds them all; the stream-only design aims at the ' + int(S.cascades) + ' of 10,000+'],
+      ['Spent finding and sizing', big(r.finding + r.waste), big(r.roots) + ' roots returned; ' + big(r.waste) + ' units on replies of cascades too small'],
     ];
     document.getElementById('c-kpis').innerHTML = k.map(([a, b, s]) => '<div class="kpi"><div class="k">' + a + '</div><div class="v">' + b + '</div><div class="s">' + s + '</div></div>').join('');
     document.getElementById('c-sub-flow').textContent = 'The plan in the headline, step by step, in numbers a month. One unit is the charge for one post returned.';
-    document.getElementById('c-sub-mix').textContent = 'The bar shows where the cap goes. Below it, each tier’s posts, with the downloaded part solid. Retweets are ' + Math.round(100 * st.rt) + '% of posts, so collecting them for every cascade is what does not fit.';
-    const fitAll = CASCADE.lowest(pop, opts({ rq: Infinity, passes: 0 }), 'full', st.cap, 1000, 1e6), fitRQ = CASCADE.lowest(pop, opts({ full: Infinity, passes: 0 }), 'rq', st.cap, 100, 1e6);
-    document.getElementById('c-sub-fit').textContent = 'Units a month against the smallest cascade collected. Dots are at the measured sizes. With no search passes counted, every post fits the cap from about ' + (fitAll ? int(roundUp(fitAll)) : '?') + '+ posts, and replies and quotes from about ' + (fitRQ ? int(roundUp(fitRQ)) + '+' + (fitRQ < 1000 ? ' (rough)' : '') : '?') + '. The black line is your plan as its second tier reaches lower.';
-    document.getElementById('c-sub-grow').textContent = 'Median share of a cascade’s seven-day size reached by each hour. The median cascade has about 99% of it at 48 hours. Of the cascades that end at 10,000+ posts, ' + pct(D.passed10k[24]) + ' have passed 10,000 in total size by 24 hours and ' + pct(D.passed10k[72]) + ' by 72. A root’s own counts pass later than the total; how much later has not been measured.';
-    document.getElementById('c-sub-find').textContent = 'The 1% stream notices a cascade only if one of its posts is sampled: ' + pct(CASCADE.binomSf(1, 100, st.stream)) + ' of the time at 100 posts. Search filters on one post’s own retweet or reply count, so the dashed line is the most it can find: a cascade whose size is spread over many replies, or sits on quotes, can be missed. The share missed has not been measured.';
-    document.getElementById('c-foot-build').textContent = 'Cascade view, fourth version · 20 November 2026. Sizes were counted by Prof. Toyoda’s group on the full Japanese stream for September 2026: ' + int(D.N[0]) + ' cascades of 1,000+ posts holding ' + big(D.P[0]) + ' posts, ' + int(D.N[2]) + ' of 10,000+ holding ' + big(D.P[2]) + '.';
+    document.getElementById('c-sub-mix').textContent = 'The bar shows where the cap goes. Below it, each tier’s posts, with the downloaded part solid. Retweets are ' + pct(1 - pop.RQ(1000) / pop.P(1000)) + ' of the posts in cascades of 1,000+, so collecting them for every cascade is what does not fit.';
+    const fitAll = CASCADE.lowest(pop, opts({ rq: Infinity, found: 'all' }), 'full', st.cap, 1000, 1e6), fitRQ = CASCADE.lowest(pop, opts({ full: Infinity, found: 'all' }), 'rq', st.cap, 100, 1e6);
+    document.getElementById('c-sub-fit').textContent = 'Units a month against the smallest cascade collected, if every cascade were found at no cost. On that footing every post fits the cap from about ' + (fitAll ? int(roundUp(fitAll)) : '?') + '+ posts, and replies and quotes from about ' + (fitRQ ? int(roundUp(fitRQ)) + '+' : '?') + '. The black line is your plan, with finding and sizing counted, as its second tier reaches lower.';
+    document.getElementById('c-sub-grow').textContent = 'Median share of a cascade’s seven-day size reached by each hour. The median cascade has about 99% of it at 48 hours. Of the cascades that end at 10,000+ posts, ' + pct(D.passed10k[24]) + ' have passed 10,000 by 24 hours, ' + pct(D.passed10k[48]) + ' by 48 and ' + pct(D.passed10k[72]) + ' by 72.';
+    document.getElementById('c-sub-find').textContent = 'By cascade size: the share that search returns with these floors, and the share whose replies are then read. A cascade is missed when its size sits on its replies and the root stays under both floors, or when the root’s counts make it look too small to size. The grey line is the chance that the 1% stream samples at least one of its posts.';
+    document.getElementById('c-foot-build').textContent = 'Cascade view, fifth version · 20 November 2026. Sizes, replies and quotes were counted by Prof. Toyoda’s group on the full Japanese stream for September 2026: ' + int(D.main.n100) + ' cascades of 100+ posts rooted at an original post, holding ' + big(D.main.posts100) + ' posts, and ' + int(D.quote.n100) + ' rooted at a quote. The page works on simulated cascades that match those counts; no row is a real cascade. Root counts and the reply-led class come from models fitted to the two days for which every post is on file.';
     drawFlow(r, hasT1, hasT2, fits); drawCap(r, fits); drawTiers(r, hasT1, hasT2); drawFit(r, hasT2); drawGrow(); drawFind();
   }
 
   /* ====================================================================== view switch */
   const views = { cascades: document.getElementById('view-cascades'), trees: document.getElementById('view-trees') };
   const tabs = { cascades: document.getElementById('tab-cascades'), trees: document.getElementById('tab-trees') };
-  const INTRO = { cascades: 'Cascade sizes are measured counts for September 2026. Set the cap, the mix of posts and three sizes; the results update as you move a control: what fits under the cap, what it costs, and what is left out.',
+  const INTRO = { cascades: 'Cascade sizes are measured counts for September 2026. Set the cap, how cascades are found and the two sizes; the results update as you move a control: what fits under the cap, what it costs, and what is missed.',
                   trees: 'The reply part of a cascade, modelled in detail. Set your assumptions about replies on Japanese-language X, the quota and what you want to collect; the results update as you move a control.' };
   function show(v) {
     for (const k in views) { views[k].hidden = k !== v; tabs[k].setAttribute('aria-pressed', String(k === v)); }

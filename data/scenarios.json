@@ -87,6 +87,54 @@
    "f1": -0.487
   }
  },
+ "sep2026": {
+  "label": "Popular roots, September 2026",
+  "source": "Maximum-likelihood fit to the reply trees of roots with 100+ retweets and quotes of their own, posted 2 and 3 September 2026 (claude/cascade2026/report/g18/fit_rootled_pooled.json); 42,296 trees; 26% of such roots have no reply and are not in the fit",
+  "params": {
+   "w": 0.8518,
+   "a1": -0.2415,
+   "t1": 0.4929,
+   "a2": -1.8475,
+   "t2": 0.7353,
+   "alpha0": 5.8125,
+   "b1": 0.7383,
+   "b2": 0.3617,
+   "c0": -1.8589,
+   "c1": 0.3868,
+   "s1": 2.2617,
+   "g0": -3.8547,
+   "mu": -1.4074,
+   "gam": 0.0729,
+   "sig": 0,
+   "tau": 1.139,
+   "f0": -3.5957,
+   "f1": 0.3815
+  }
+ },
+ "sep2026q": {
+  "label": "Under quotes, September 2026",
+  "source": "Maximum-likelihood fit to conversations rooted at a quote of a cascade of 100+ posts, 2 and 3 September 2026 (claude/cascade2026/report/g18/fit_quote_pooled.json); 277,321 trees; 88% of such quotes have no reply and are not in the fit",
+  "params": {
+   "w": 0.904,
+   "a1": 1.9583,
+   "t1": 0.0121,
+   "a2": -1.2714,
+   "t2": 0.7616,
+   "alpha0": 3.3479,
+   "b1": 0.5189,
+   "b2": 0.189,
+   "c0": -0.4123,
+   "c1": 0.6139,
+   "s1": 2.4461,
+   "g0": -3.0767,
+   "mu": -0.409,
+   "gam": 0.2371,
+   "sig": 0.0704,
+   "tau": 0.9392,
+   "f0": -2.428,
+   "f1": 0.1879
+  }
+ },
  "old_low": {
   "label": "Low end (superseded 2026-11-19)",
   "targets": {
