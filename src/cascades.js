@@ -13,18 +13,18 @@
     month: 'September',  // which measured month the volumes follow
     change: 0,           // change in volume since that month (a 31-day month alone is +3%)
     quoteRooted: true,   // count cascades rooted at a quote as well
-    replyLed: true,      // count reply-led cascades (their retweets hang from replies) as well
+    replyLed: false,     // reply-led cascades (their retweets hang from replies) are left out: a sample checked on X is automated advertising
     full: 10000,         // tier 1: every post, for cascades of at least this many posts
     rqAuto: true, rq: 2500,   // tier 2: replies and quotes; rqAuto sets rq to the lowest size that fits
     rtMode: 'none', rtN: 100, rtRate: 0.03,   // retweets bought for tier 2
-    fr: 1000, fd: 100,   // search floors on a root's own retweets and replies; a root passing either is returned
+    fr: 500, fd: Infinity,   // search floors on a root's own retweets and replies; a root passing either is returned. No floor on replies: it is needed only to find reply-led cascades
     triage: 'counts', theta: 0.5,   // whose replies are read to size the cascade, and how likely it must look
     passes: 3,           // search passes for each day of roots; the last is at the end of the window
     stream: 0.01,        // the sample stream, outside the cap
   };
   const TIER = { full: 'var(--quiet)', rq: 'var(--root)', bought: 'var(--sample)', census: 'var(--both)', waste: 'var(--ink-3)', reserve: 'var(--ref)' };
   const KIND = ['var(--root)', 'var(--sample)', 'var(--both)'];
-  let st = JSON.parse(JSON.stringify(DEFAULTS)), pop = null;
+  let st = Object.assign({}, DEFAULTS), pop = null;
   const sz = (v) => int(v) + ' posts';
 
   const GROUPS = [
@@ -37,7 +37,8 @@
       { key: 'month', kind: 'seg', label: 'A month like, in 2026', options: [['June', 'Jun'], ['July', 'Jul'], ['August', 'Aug'], ['September', 'Sep']], hint: 'Sizes were measured for September, the largest of the four. The others scale it by their total.' },
       { key: 'change', kind: 'range', label: 'Change in volume since then', min: -0.2, max: 0.5, step: 0.01, fmt: (v) => (v > 0 ? '+' : '') + Math.round(100 * v) + '%', hint: 'Volumes rose about 8% a month from July to September. A 31-day month adds 3%.' },
       { key: 'quoteRooted', kind: 'check', label: 'Count cascades rooted at a quote', hint: 'Measured, as lower bounds: a quote late in its parent’s week was followed for less than seven days.' },
-      { key: 'replyLed', kind: 'check', label: 'Count reply-led cascades', hint: 'Cascades whose retweets hang from the replies, not the root: about a quarter of posts in September, from 11% to 35% by day. A sample checked on X shows nearly all are automated advertising: Chinese-language replies selling sexual services, retweeted by automated accounts. Unticked, they are returned by search but not collected.' },
+      { key: 'replyLed', kind: 'check', label: 'Count reply-led cascades', hint: 'Cascades whose retweets hang from the replies, not the root: about a quarter of posts in September, from 11% to 35% by day. A sample checked on X shows nearly all are automated advertising: Chinese-language replies selling sexual services, retweeted by automated accounts. They are left out unless this is ticked. Ticking it also sets a floor of 100 replies, which search needs to find them; unticking it removes that floor.',
+        then: (on) => { if (on && st.fd === Infinity) st.fd = 100; if (!on) st.fd = Infinity; } },
       { kind: 'facts', id: 'c-facts' },
     ] },
     { title: 'What to collect', controls: [
@@ -50,7 +51,7 @@
       { key: 'rtRate', kind: 'range', label: 'Random share of retweets bought', min: 0.01, max: 0.3, step: 0.01, fmt: (v) => Math.round(100 * v) + '%', disabled: () => st.rtMode !== 'sample' },
       { key: 'fr', kind: 'pick', label: 'Search floor on a root’s own retweets', choices: [100, 300, 500, 1000, 2000, 3000, 5000], fmt: (v) => int(v) + ' retweets' },
       { key: 'fd', kind: 'pick', label: 'Search floor on a root’s own replies', choices: [50, 100, 150, 200, 300, 500, Infinity], fmt: (v) => (v === Infinity ? 'not used' : int(v) + ' replies'),
-        hint: 'Search returns a root that passes either floor. Reply-led cascades are found only through the floor on replies.' },
+        hint: 'Search returns a root that passes either floor. Reply-led cascades are found only through the floor on replies, so it is not used while they are left out.' },
       { key: 'triage', kind: 'seg', label: 'Read the replies of', options: [['counts', 'Likely, by counts'], ['stream', 'Likely, by stream'], ['all', 'Every root']],
         hint: 'Replies carry their own counts, so reading them gives a cascade’s size. They cost a unit each even when the cascade turns out too small. By counts: the size is read off the root’s own counts. By stream: off the cascade’s posts in the 1% sample, which needs each sampled post matched to its cascade.' },
       { key: 'theta', kind: 'range', label: 'Likely means an estimated size of at least', min: 0.2, max: 1, step: 0.05, fmt: (v) => Math.round(100 * v) + '% of the second tier', disabled: () => st.triage === 'all' },
@@ -69,7 +70,7 @@
         const wrap = mk('div', 'ctl'), head = mk('div', 'ctl-head'), isSlider = c.kind === 'range' || c.kind === 'log' || c.kind === 'pick';
         if (c.kind === 'check') {
           const s = mk('div', 'checks'), l = mk('label'), i = mk('input'); i.type = 'checkbox'; i.id = 'cc-' + c.key;
-          i.addEventListener('change', () => { st[c.key] = i.checked; changed(); });
+          i.addEventListener('change', () => { st[c.key] = i.checked; if (c.then) c.then(i.checked); changed(); });
           l.appendChild(i); l.appendChild(document.createTextNode(c.label)); s.appendChild(l); wrap.appendChild(s);
           refreshers.push(() => { i.checked = st[c.key]; });
         } else {
@@ -95,7 +96,7 @@
       rail.appendChild(sec);
     });
     const sec = mk('section', 'group'), b = mk('button', 'btn', 'Reset to the measured figures'); b.type = 'button';
-    b.addEventListener('click', () => { st = JSON.parse(JSON.stringify(DEFAULTS)); changed(); }); sec.appendChild(b); rail.appendChild(sec);
+    b.addEventListener('click', () => { st = Object.assign({}, DEFAULTS); changed(); }); sec.appendChild(b); rail.appendChild(sec);
   }
   let raf = 0;
   function changed() { derive(); refreshers.forEach((f) => f()); if (!raf) raf = requestAnimationFrame(() => { raf = 0; render(); }); }
@@ -329,8 +330,8 @@
     const fitAll = CASCADE.lowest(pop, opts({ rq: Infinity, found: 'all' }), 'full', st.cap, 1000, 1e6), fitRQ = CASCADE.lowest(pop, opts({ full: Infinity, found: 'all' }), 'rq', st.cap, 100, 1e6);
     document.getElementById('c-sub-fit').textContent = 'Units a month against the smallest cascade collected, if every cascade were found at no cost. On that footing every post fits the cap from about ' + (fitAll ? int(roundUp(fitAll)) : '?') + '+ posts, and replies and quotes from about ' + (fitRQ ? int(roundUp(fitRQ)) + '+' : '?') + '. The black line is your plan, with finding and sizing counted, as its second tier reaches lower.';
     document.getElementById('c-sub-grow').textContent = 'Median share of a cascade’s seven-day size reached by each hour. The median cascade has about 99% of it at 48 hours. Of the cascades that end at 10,000+ posts, ' + pct(D.passed10k[24]) + ' have passed 10,000 by 24 hours, ' + pct(D.passed10k[48]) + ' by 48 and ' + pct(D.passed10k[72]) + ' by 72.';
-    document.getElementById('c-sub-find').textContent = 'By cascade size: the share that search returns with these floors, and the share whose replies are then read. A cascade is missed when its size sits on its replies and the root stays under both floors, or when the root’s counts make it look too small to size. The grey line is the chance that the 1% stream samples at least one of its posts.';
-    document.getElementById('c-foot-build').textContent = 'Cascade view, fifth version · 20 November 2026. Sizes, replies and quotes were counted by Prof. Toyoda’s group on the full Japanese stream for September 2026: ' + int(D.main.n100) + ' cascades of 100+ posts rooted at an original post, holding ' + big(D.main.posts100) + ' posts, and ' + int(D.quote.n100) + ' rooted at a quote. The page works on simulated cascades that match those counts; no row is a real cascade. Root counts and the reply-led class come from models fitted to the two days for which every post is on file.';
+    document.getElementById('c-sub-find').textContent = 'By cascade size: the share that search returns with these floors, and the share whose replies are then read. A cascade is missed when its size sits on its replies and the root stays under ' + (st.fd === Infinity ? 'the floor' : 'both floors') + ', or when the root’s counts make it look too small to size. The grey line is the chance that the 1% stream samples at least one of its posts.';
+    document.getElementById('c-foot-build').textContent = 'Cascade view, fifth version · 21 November 2026. Sizes, replies and quotes were counted by Prof. Toyoda’s group on the full Japanese stream for September 2026: ' + int(D.main.n100) + ' cascades of 100+ posts rooted at an original post, holding ' + big(D.main.posts100) + ' posts, and ' + int(D.quote.n100) + ' rooted at a quote. The page works on simulated cascades that match those counts; no row is a real cascade. Root counts and the reply-led class come from models fitted to the two days for which every post is on file.';
     drawFlow(r, hasT1, hasT2, fits); drawCap(r, fits); drawTiers(r, hasT1, hasT2); drawFit(r, hasT2); drawGrow(); drawFind();
   }
 

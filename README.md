@@ -13,7 +13,9 @@ Japanese X today" (about 12% of replies in conversations of 100+ posts); the oth
   and 168 hours, replies and quotes. No row is a real cascade: rows are simulated from summary statistics
   (counts, totals and histograms) of groups of at least 100 real cascades in 30 daily summaries for
   September 2026, and reproduce the measured counts and post totals by size to within about 1%. Each
-  row's class (root-led or reply-led) and its root's own counts come from fitted models. The table is
+  row's class (root-led or reply-led) and its root's own counts come from fitted models. The page opens
+  on a plan that leaves reply-led cascades out (a sample checked on X is automated advertising) and
+  searches by the root's retweet count alone; a checkbox counts them again. The table is
   generated outside this folder and is not meant to be edited by hand. The arithmetic is `src/cascade_model.js`, the view
   `src/cascades.js` (defaults in `DEFAULTS`), checked by `node test/test_cascade.js`.
   The measured cascades themselves are confidential and are not in this repository; only aggregate

@@ -86,7 +86,12 @@ const but = (o) => Object.assign({}, base, o);
   yes('a lower bar for reading replies finds more and wastes more', lower.found2 > r.found2 && lower.waste > r.waste);
   const no = C.population({ window: 3, replyLed: false }), rn = C.plan(no, base);
   yes('with reply-led cascades left out, nearly all of tier 2 is found and the plan costs less', rn.found2 > 0.98 && rn.total < r.total);
-  check('they are still returned by search', rn.roots, r.roots, 1e-6); }
+  check('they are still returned by search', rn.roots, r.roots, 1e-6);
+  // the page's opening plan: reply-led left out, a floor of 500 retweets on the root, no floor on replies
+  const od = but({ fr: 500, fd: Infinity }), eo = C.lowest(no, od, 'rq', 90e6, 100, 10000), ro = C.plan(no, Object.assign({}, od, { rq: eo }));
+  yes('left out and searched by retweets alone, the second tier reaches below 1,000 posts under 90M', eo > 600 && eo < 1000);
+  yes('and search finds nearly all of both tiers', ro.found2 > 0.95 && ro.found1 > 0.995);
+  yes('with less spent on cascades too small than the plan that counts them', ro.waste < 0.3 * r.waste); }
 
 // a cascade whose size sits on its replies: the root's retweet count does not find it
 { const rows = [{ w: 1, s: 9, q: 0, led: 1, rep: 2, qt: 0, r0: 0, d0: 2, q0: 0 }, { w: 1, s: 9, q: 0, led: 0, rep: 1, qt: 1, r0: 7, d0: 1, q0: 1 }];
