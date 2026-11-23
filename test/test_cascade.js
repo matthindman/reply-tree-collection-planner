@@ -93,6 +93,22 @@ const but = (o) => Object.assign({}, base, o);
   yes('and search finds nearly all of both tiers', ro.found2 > 0.95 && ro.found1 > 0.995);
   yes('with less spent on cascades too small than the plan that counts them', ro.waste < 0.3 * r.waste); }
 
+// a sample of the reply-led cascades
+{ const all = C.population({ window: 3 }), none = C.population({ window: 3, replyLed: false }), tenth = C.population({ window: 3, replyLed: 0.1 });
+  check('a 10% sample holds a tenth of the reply-led posts', tenth.LedPosts(100), 0.1 * all.LedPosts(100), 1e-6 * all.LedPosts(100));
+  check('and every other cascade', tenth.P(100) - tenth.LedPosts(100), none.P(100), 1e-6 * none.P(100));
+  yes('a share of 0 is the same as leaving them out, a share of 1 the same as counting them', C.population({ window: 3, replyLed: 0 }).P(100) === none.P(100) && C.population({ window: 3, replyLed: 1 }).P(100) === all.P(100));
+  const o = { full: 10000, rq: 1000, passes: 3, fr: 500, fd: 100, triage: 'counts', theta: 0.5, rtMode: 'none', stream: 0.01 };
+  const ra = C.plan(all, o), rn = C.plan(none, o), rt = C.plan(tenth, o);
+  check('search returns the same roots whatever the share', rt.roots, ra.roots, 1e-6);
+  const r0 = C.plan(none, Object.assign({}, o, { fd: Infinity }));
+  yes('a sample costs more than leaving them out and searching by retweets alone, and much less than taking them all', rt.total > r0.total && rt.total < r0.total + 0.3 * (ra.total - r0.total));
+  yes('roots found by their replies alone are read only when sampled: less is spent on cascades too small than with none left out', rt.waste < rn.waste);
+  // the page's opening plan: a random 2%, floors of 500 retweets or 100 replies
+  const two = C.population({ window: 3, replyLed: 0.02 }), eo = C.lowest(two, o, 'rq', 90e6, 100, 10000), ro = C.plan(two, Object.assign({}, o, { rq: eo }));
+  yes('with a 2% sample the second tier starts between 900 and 1,200 posts under 90M', eo > 900 && eo < 1200);
+  yes('and search finds nearly all of both tiers', ro.found2 > 0.95 && ro.found1 > 0.995); }
+
 // a cascade whose size sits on its replies: the root's retweet count does not find it
 { const rows = [{ w: 1, s: 9, q: 0, led: 1, rep: 2, qt: 0, r0: 0, d0: 2, q0: 0 }, { w: 1, s: 9, q: 0, led: 0, rep: 1, qt: 1, r0: 7, d0: 1, q0: 1 }];
   const pop = C.build(rows, {}), o = { full: Infinity, rq: 9, passes: 1, theta: 1, triage: 'all', rtMode: 'none' };

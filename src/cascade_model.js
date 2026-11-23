@@ -56,14 +56,15 @@
   }
 
   /* rows: [{ w, s, q, led, rep, qt, r0, d0, q0 }] at one window. Sorted by size, largest first, with running
-     totals, so counts and posts at or above a size are one lookup. o.replyLed === false leaves the reply-led
-     cascades out of every count: they are not wanted and are not collected. */
+     totals, so counts and posts at or above a size are one lookup. o.replyLed === false (or 0) leaves the reply-led
+     cascades out of every count: they are not wanted and are not collected. A row marked `out` is the part of a
+     reply-led group that a sample leaves out; it is treated the same way. */
   function build(rows, o) {
     rows = rows.slice().sort((a, b) => b.s - a.s);
-    const wantLed = !o || o.replyLed !== false, n = rows.length;
+    const wantLed = !o || (o.replyLed !== false && o.replyLed !== 0), n = rows.length;
     const cN = new Float64Array(n + 1), cQ = new Float64Array(n + 1), cP = new Float64Array(n + 1), cPO = new Float64Array(n + 1), cRep = new Float64Array(n + 1), cQt = new Float64Array(n + 1), cLed = new Float64Array(n + 1);
     rows.forEach((r, i) => {
-      r.skip = r.led && !wantLed;
+      r.skip = !!(r.led && (!wantLed || r.out));
       const w = r.skip ? 0 : r.w;
       cN[i + 1] = cN[i] + (r.q ? 0 : w); cQ[i + 1] = cQ[i] + (r.q ? w : 0);
       cP[i + 1] = cP[i] + w * r.s; cPO[i + 1] = cPO[i] + (r.q ? 0 : w * r.s);
@@ -79,19 +80,25 @@
   }
 
   /* o: { scale: volume against September, window: 1 | 2 | 3 | 7 days, quoteRooted: count quote-rooted cascades too,
-          replyLed: count reply-led cascades too }
+          replyLed: count reply-led cascades too. true or 1: all of them. false or 0: none. A share between 0 and 1:
+                    a random sample of that share, drawn by root before anything is read; the rest are returned by
+                    search, recognised and not collected }
      N: cascades rooted at an original post. NQ: rooted at a quote. NA: both. P: posts in both. PO: posts in the
      first kind. Rep, Qt, RQ: replies, quotes, and both, in cascades of at least that size. */
   function population(o) {
     o = o || {};
     const key = KEY[o.window] || 's7', sc = o.scale == null ? 1 : o.scale, rows = [];
+    const share = o.replyLed === false ? 0 : (o.replyLed == null || o.replyLed === true) ? 1 : Math.min(1, Math.max(0, +o.replyLed));
     for (let i = 0; i < COUNT; i++) {
       if (o.quoteRooted === false && R.q[i]) continue;
       const s = R[key][i], f = s / R.s7[i];
       if (!(s > 0)) continue;
-      rows.push({ w: R.w[i] * sc, s, q: R.q[i], led: R.led[i], rep: R.rep[i] * f, qt: R.qt[i] * f, r0: R.r0[i] * f, d0: R.d0[i] * f, q0: R.q0[i] * f });
+      const row = (w, out) => ({ w, out, s, q: R.q[i], led: R.led[i], rep: R.rep[i] * f, qt: R.qt[i] * f, r0: R.r0[i] * f, d0: R.d0[i] * f, q0: R.q0[i] * f });
+      if (R.led[i] && share > 0 && share < 1) { rows.push(row(R.w[i] * sc * share, 0)); rows.push(row(R.w[i] * sc * (1 - share), 1)); }
+      else rows.push(row(R.w[i] * sc, 0));
     }
-    const pop = build(rows, o);
+    const pop = build(rows, Object.assign({}, o, { replyLed: share > 0 }));
+    pop.ledShare = share;
     // what the window keeps: posts of the seven-day cascades of 100+, and how many of the 10,000+ still reach 10,000
     let p7 = 0, pw = 0; for (let i = 0; i < COUNT; i++) { if (o.quoteRooted === false && R.q[i]) continue; p7 += R.w[i] * R.s7[i]; pw += R.w[i] * R[key][i]; }
     pop.share = pw / p7; pop.window = o.window || 7;
@@ -104,11 +111,15 @@
      triage: which returned roots have their replies read. 'counts': those whose size read from the root's counts
      is at least theta * rq. 'stream': those with enough posts in the 1% sample to suggest theta * rq. 'all': every one.
      full may be Infinity (no cascade collected in full). n1, n2 count cascades rooted at an original post;
-     q1, q2 those rooted at a quote. */
+     q1, q2 those rooted at a quote.
+     When the population holds a sample of the reply-led cascades (pop.ledShare between 0 and 1), the sample is drawn
+     by root before anything is read, so a root that search returns through the floor on replies alone has its
+     replies read only if it is in the sample. Search still returns, and charges for, every such root. */
   function plan(pop, o) {
     const full = o.full, rq = Math.min(o.rq, full), all = o.found === 'all', passes = o.passes == null ? 1 : o.passes;
     const fr = o.fr == null ? Infinity : o.fr, fd = o.fd == null ? Infinity : o.fd, theta = o.theta == null ? 0.5 : o.theta, need = theta * rq;
     const hits = Math.max(1, Math.ceil(need * (o.stream || 0.01))), triage = o.triage || 'counts';
+    const viaShare = pop.ledShare > 0 && pop.ledShare < 1 ? pop.ledShare : 1;
     const t1 = { replies: 0, quotes: 0, retweets: 0 }, t2 = { replies: 0, quotes: 0, retweets: 0, allRetweets: 0 };
     let roots = 0, sized = 0, waste = 0, n1 = 0, n2 = 0, q1 = 0, q2 = 0, A = 0, B = 0, want1 = 0, want2 = 0, gotA = 0, gotB = 0, bought = 0;
     for (const r of pop.rows) {
@@ -120,7 +131,7 @@
       if (!cand) continue;
       const pv = all || triage === 'all' ? 1 : triage === 'stream' ? binomSf(hits, Math.round(r.s), o.stream || 0.01) : (fromCounts(r.r0, r.d0, r.q0) >= need ? 1 : 0);
       if (!(pv > 0)) continue;
-      const w = r.w * pv;
+      const w = r.w * pv * (!all && !r.led && !(r.r0 >= fr) ? viaShare : 1);   // an ordinary root found by its replies alone is read only if sampled; reply-led rows already carry the share
       sized += w;
       if (tier === 1) { t1.replies += w * r.rep; t1.quotes += w * r.qt; t1.retweets += w * rt; gotA += w * r.s; if (r.q) q1 += w; else n1 += w; }
       else if (tier === 2) {
@@ -141,12 +152,13 @@
   function foundBySize(pop, o, edges) {
     const out = edges.slice(0, -1).map((lo, i) => ({ lo, hi: edges[i + 1], n: 0, got: 0 }));
     const need = (o.theta == null ? 0.5 : o.theta) * Math.min(o.rq, o.full), hits = Math.max(1, Math.ceil(need * (o.stream || 0.01)));
+    const viaShare = pop.ledShare > 0 && pop.ledShare < 1 ? pop.ledShare : 1;
     for (const r of pop.rows) {
       if (r.skip) continue;
       const b = out.find((x) => r.s >= x.lo && r.s < x.hi); if (!b) continue;
       const cand = r.r0 >= o.fr || r.d0 >= o.fd;
       const pv = !cand ? 0 : o.triage === 'all' ? 1 : o.triage === 'stream' ? binomSf(hits, Math.round(r.s), o.stream || 0.01) : (fromCounts(r.r0, r.d0, r.q0) >= need ? 1 : 0);
-      b.n += r.w; b.got += r.w * pv; b.cand = (b.cand || 0) + (cand ? r.w : 0);
+      b.n += r.w; b.got += r.w * pv * (!r.led && !(r.r0 >= o.fr) ? viaShare : 1); b.cand = (b.cand || 0) + (cand ? r.w : 0);
     }
     return out.map((b) => ({ lo: b.lo, hi: b.hi, n: b.n, found: b.n ? b.got / b.n : null, returned: b.n ? (b.cand || 0) / b.n : null }));
   }
