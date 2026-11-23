@@ -40,6 +40,23 @@
     streamOnly: { cascades: 3206, posts: 60.2e6, low: 68.7e6, high: 98.6e6 },
   };
 
+  /* Prize draws ("follow and repost to win"). The daily summaries have no text, so which cascades are prize draws comes
+     from a topic study of 3,974 sampled roots for September 2026. `p` is the prize draws' share of posts among cascades
+     that are not reply-led, by size at three days (lower edges in `size`); `quote` is their share of cascades rooted at
+     a quote, by size. A synthetic cascade is split into a prize-draw part and a remainder by its size's share, so the
+     posts in prize draws add up to the measured share at every size. */
+  const PRIZE = {
+    size: [0, 100, 300, 850, 2000, 3500, 5000, 7500, 10000, 15000, 20000, 30000, 50000, 100000],
+    p: [0.0277, 0.0184, 0.04, 0.0751, 0.1054, 0.1408, 0.2126, 0.4008, 0.4514, 0.5675, 0.6807, 0.7417, 0.8141, 1],
+    quote: { size: [0, 1000, 10000], p: [0.011, 0.0213, 0.0306] },
+  };
+  DATA.prize = PRIZE;
+  const bin = (edges, v) => { let i = edges.length - 1; while (i > 0 && v < edges[i]) i--; return i; };
+  function prizeShare(i) {                                   // row i of the table: the share of it that is prize draws
+    if (R.led[i]) return 0;
+    return R.q[i] ? PRIZE.quote.p[bin(PRIZE.quote.size, R.s7[i])] : PRIZE.p[bin(PRIZE.size, R.s3[i])];
+  }
+
   function binomSf(h, n, p) {                                // P(Binomial(n,p) >= h)
     if (h <= 0) return 1;
     if (n < h) return 0;
@@ -58,21 +75,21 @@
   /* rows: [{ w, s, q, led, rep, qt, r0, d0, q0 }] at one window. Sorted by size, largest first, with running
      totals, so counts and posts at or above a size are one lookup. o.replyLed === false (or 0) leaves the reply-led
      cascades out of every count: they are not wanted and are not collected. A row marked `out` is the part of a
-     reply-led group that a sample leaves out; it is treated the same way. */
+     reply-led or prize-draw group that is left out; it is treated the same way. A row marked `prize` is a prize draw. */
   function build(rows, o) {
     rows = rows.slice().sort((a, b) => b.s - a.s);
     const wantLed = !o || (o.replyLed !== false && o.replyLed !== 0), n = rows.length;
-    const cN = new Float64Array(n + 1), cQ = new Float64Array(n + 1), cP = new Float64Array(n + 1), cPO = new Float64Array(n + 1), cRep = new Float64Array(n + 1), cQt = new Float64Array(n + 1), cLed = new Float64Array(n + 1);
+    const cN = new Float64Array(n + 1), cQ = new Float64Array(n + 1), cP = new Float64Array(n + 1), cPO = new Float64Array(n + 1), cRep = new Float64Array(n + 1), cQt = new Float64Array(n + 1), cLed = new Float64Array(n + 1), cPrize = new Float64Array(n + 1);
     rows.forEach((r, i) => {
-      r.skip = !!(r.led && (!wantLed || r.out));
+      r.skip = !!(r.out || (r.led && !wantLed));
       const w = r.skip ? 0 : r.w;
       cN[i + 1] = cN[i] + (r.q ? 0 : w); cQ[i + 1] = cQ[i] + (r.q ? w : 0);
       cP[i + 1] = cP[i] + w * r.s; cPO[i + 1] = cPO[i] + (r.q ? 0 : w * r.s);
-      cRep[i + 1] = cRep[i] + w * r.rep; cQt[i + 1] = cQt[i] + w * r.qt; cLed[i + 1] = cLed[i] + (r.led ? w * r.s : 0);
+      cRep[i + 1] = cRep[i] + w * r.rep; cQt[i + 1] = cQt[i] + w * r.qt; cLed[i + 1] = cLed[i] + (r.led ? w * r.s : 0); cPrize[i + 1] = cPrize[i] + (r.prize ? w * r.s : 0);
     });
     const upto = (s) => { let lo = 0, hi = n; while (lo < hi) { const m = (lo + hi) >> 1; if (rows[m].s >= s) lo = m + 1; else hi = m; } return lo; };   // rows of at least s posts
     const at = (c) => (s) => c[upto(s)];
-    const pop = { rows, N: at(cN), NQ: at(cQ), P: at(cP), PO: at(cPO), Rep: at(cRep), Qt: at(cQt), LedPosts: at(cLed) };
+    const pop = { rows, N: at(cN), NQ: at(cQ), P: at(cP), PO: at(cPO), Rep: at(cRep), Qt: at(cQt), LedPosts: at(cLed), PrizePosts: at(cPrize) };
     pop.NA = (s) => pop.N(s) + pop.NQ(s);
     pop.RQ = (s) => pop.Rep(s) + pop.Qt(s);
     pop.mean = (s) => pop.P(s) / pop.NA(s);
@@ -82,23 +99,30 @@
   /* o: { scale: volume against September, window: 1 | 2 | 3 | 7 days, quoteRooted: count quote-rooted cascades too,
           replyLed: count reply-led cascades too. true or 1: all of them. false or 0: none. A share between 0 and 1:
                     a random sample of that share, drawn by root before anything is read; the rest are returned by
-                    search, recognised and not collected }
+                    search, recognised and not collected.
+          prize: the same for prize draws (default 1, all of them). A prize draw is recognised from the root's text,
+                 which search returns, so one that is left out costs nothing more: its replies are not read. }
      N: cascades rooted at an original post. NQ: rooted at a quote. NA: both. P: posts in both. PO: posts in the
      first kind. Rep, Qt, RQ: replies, quotes, and both, in cascades of at least that size. */
+  let PZ = null;
   function population(o) {
     o = o || {};
+    if (!PZ) { PZ = new Float64Array(COUNT); for (let i = 0; i < COUNT; i++) PZ[i] = prizeShare(i); }
     const key = KEY[o.window] || 's7', sc = o.scale == null ? 1 : o.scale, rows = [];
     const share = o.replyLed === false ? 0 : (o.replyLed == null || o.replyLed === true) ? 1 : Math.min(1, Math.max(0, +o.replyLed));
+    const prize = o.prize === false ? 0 : (o.prize == null || o.prize === true) ? 1 : Math.min(1, Math.max(0, +o.prize));
     for (let i = 0; i < COUNT; i++) {
       if (o.quoteRooted === false && R.q[i]) continue;
       const s = R[key][i], f = s / R.s7[i];
       if (!(s > 0)) continue;
-      const row = (w, out) => ({ w, out, s, q: R.q[i], led: R.led[i], rep: R.rep[i] * f, qt: R.qt[i] * f, r0: R.r0[i] * f, d0: R.d0[i] * f, q0: R.q0[i] * f });
-      if (R.led[i] && share > 0 && share < 1) { rows.push(row(R.w[i] * sc * share, 0)); rows.push(row(R.w[i] * sc * (1 - share), 1)); }
-      else rows.push(row(R.w[i] * sc, 0));
+      const row = (w, out, pr) => ({ w, out, prize: pr || 0, s, q: R.q[i], led: R.led[i], rep: R.rep[i] * f, qt: R.qt[i] * f, r0: R.r0[i] * f, d0: R.d0[i] * f, q0: R.q0[i] * f });
+      const w = R.w[i] * sc, put = (wt, out, pr) => { if (wt > 0) rows.push(row(wt, out, pr)); };
+      if (R.led[i]) { if (share > 0 && share < 1) { put(w * share, 0); put(w * (1 - share), 1); } else put(w, 0); continue; }
+      const pz = PZ[i];
+      put(w * (1 - pz), 0); put(w * pz * prize, 0, 1); put(w * pz * (1 - prize), 1, 1);
     }
     const pop = build(rows, Object.assign({}, o, { replyLed: share > 0 }));
-    pop.ledShare = share;
+    pop.ledShare = share; pop.prizeShare = prize;
     // what the window keeps: posts of the seven-day cascades of 100+, and how many of the 10,000+ still reach 10,000
     let p7 = 0, pw = 0; for (let i = 0; i < COUNT; i++) { if (o.quoteRooted === false && R.q[i]) continue; p7 += R.w[i] * R.s7[i]; pw += R.w[i] * R[key][i]; }
     pop.share = pw / p7; pop.window = o.window || 7;

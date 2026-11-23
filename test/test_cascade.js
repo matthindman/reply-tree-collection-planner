@@ -109,6 +109,21 @@ const but = (o) => Object.assign({}, base, o);
   yes('with a 2% sample the second tier starts between 900 and 1,200 posts under 90M', eo > 900 && eo < 1200);
   yes('and search finds nearly all of both tiers', ro.found2 > 0.95 && ro.found1 > 0.995); }
 
+// prize draws
+{ const all = C.population({ window: 3, replyLed: false }), none = C.population({ window: 3, replyLed: false, prize: 0 }), two = C.population({ window: 3, replyLed: false, prize: 0.02 });
+  check('prize draws hold about 63% of the posts in original-root cascades of 10,000+ that are not reply-led', all.PrizePosts(10000) / all.PO(10000), 0.61, 0.04);
+  check('left out, their posts are gone from every count', all.P(100) - none.P(100), all.PrizePosts(100), 1e-6 * all.P(100));
+  check('a 2% sample holds 2% of their posts', two.PrizePosts(100), 0.02 * all.PrizePosts(100), 1e-6 * all.PrizePosts(100));
+  yes('leaving the option out counts every prize draw', C.population({ window: 3, replyLed: false, prize: 1 }).P(100) === all.P(100) && none.PrizePosts(100) === 0);
+  const o = { full: 10000, rq: 300, passes: 3, fr: 300, fd: Infinity, triage: 'counts', theta: 0.5, rtMode: 'none', stream: 0.01 };
+  const ra = C.plan(all, o), rn = C.plan(none, o);
+  check('search returns the same roots with prize draws left out', rn.roots, ra.roots, 1e-6);
+  yes('without prize draws the cascades in full cost less than half as much', rn.cost1 < 0.5 * ra.cost1 && rn.cost1 > 0.3 * ra.cost1);
+  // the page's opening plan: a random 2% of reply-led cascades and of prize draws, floors of 300 retweets or 100 replies, second tier from 300 posts
+  const open = C.population({ window: 3, replyLed: 0.02, prize: 0.02 }), oo = Object.assign({}, o, { fd: 100 }), ro = C.plan(open, oo), rin = C.plan(C.population({ window: 3, replyLed: 0.02 }), oo);
+  yes('the opening plan reaches 300 posts for 55M to 70M units, with at least 80% of the second tier found', ro.total > 55e6 && ro.total < 70e6 && ro.found2 >= 0.8);
+  yes('the same reach with every prize draw collected is over the cap', rin.total > 100e6); }
+
 // a cascade whose size sits on its replies: the root's retweet count does not find it
 { const rows = [{ w: 1, s: 9, q: 0, led: 1, rep: 2, qt: 0, r0: 0, d0: 2, q0: 0 }, { w: 1, s: 9, q: 0, led: 0, rep: 1, qt: 1, r0: 7, d0: 1, q0: 1 }];
   const pop = C.build(rows, {}), o = { full: Infinity, rq: 9, passes: 1, theta: 1, triage: 'all', rtMode: 'none' };
