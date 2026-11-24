@@ -14,11 +14,11 @@
     change: 0,           // change in volume since that month (a 31-day month alone is +3%)
     quoteRooted: true,   // count cascades rooted at a quote as well
     replyLed: 0.02,      // share of the reply-led cascades (their retweets hang from replies) that is collected: a random sample drawn by root ID. 0 leaves them out, 1 takes them all. A sample checked on X is automated advertising, so the page opens on a small share
-    prize: 0.02,         // share of the prize draws ("follow and repost to win") that is collected, drawn the same way. They are 63% of posts in cascades of 10,000+
+    prize: 0.2,          // share of the prize draws ("follow and repost to win") that is collected, drawn the same way. They are 63% of posts in cascades of 10,000+. 20% is the largest share offered that fits the cap with the reserve when the second tier reaches down to 100 posts (set 24 November 2026; 2% before)
     full: 10000,         // tier 1: every post, for cascades of at least this many posts
     rqAuto: true, rq: 2500,   // tier 2: replies and quotes; rqAuto sets rq to the lowest size that fits
     rtMode: 'none', rtN: 100, rtRate: 0.03,   // retweets bought for tier 2
-    fr: 300, fd: 100,    // search floors on a root's own retweets and replies; a root passing either is returned. The floor on replies is needed only to find reply-led cascades; Infinity means not used
+    fr: 100, fd: 100,    // (fr was 300 until 24 November 2026: 100 lets the second tier reach down to 100 posts) search floors on a root's own retweets and replies; a root passing either is returned. The floor on replies is needed only to find reply-led cascades; Infinity means not used
     triage: 'counts', theta: 0.5,   // whose replies are read to size the cascade, and how likely it must look
     recog: 'counts',     // how a returned root is known to be reply-led before its replies are read: 'counts' (more than five replies for each retweet) or 'class' (always, at no cost: the page's assumption until 24 November 2026)
     passes: 3,           // search passes for each day of roots; the last is at the end of the window
@@ -32,7 +32,7 @@
   const GROUPS = [
     { title: 'The contract', controls: [
       { key: 'cap', kind: 'log', label: 'Monthly cap, in units', min: 1e7, max: 1e9, fmt: big, hint: 'One unit is the charge for one post returned.' },
-      { key: 'reserve', kind: 'range', label: 'Kept in reserve', min: 0, max: 3e7, step: 1e6, fmt: (v) => (v ? big(v) : 'none'), hint: 'For daily spikes, the largest cascades and lookups. By the day its roots were posted, the opening plan costs 1.7M to 2.6M units a day; a month at the rate of its dearest seven days in a row is 68M.' },
+      { key: 'reserve', kind: 'range', label: 'Kept in reserve', min: 0, max: 3e7, step: 1e6, fmt: (v) => (v ? big(v) : 'none'), hint: 'For daily spikes, the largest cascades and lookups. By the day its roots were posted, the opening plan costs 2.4M to 3.6M units a day. A month at the rate of its dearest seven days in a row is 96M, so such a week draws on the reserve.' },
       { key: 'window', kind: 'seg', label: 'Window after the root is posted', options: [[1, '1 day'], [2, '2 days'], [3, '3 days'], [7, '7 days']], hint: 'Posts after the window are not collected. Sizes at each window are measured.' },
     ] },
     { title: 'Volumes', controls: [
@@ -40,15 +40,15 @@
       { key: 'change', kind: 'range', label: 'Change in volume since then', min: -0.2, max: 0.5, step: 0.01, fmt: (v) => (v > 0 ? '+' : '') + Math.round(100 * v) + '%', hint: 'Volumes rose about 8% a month from July to September. A 31-day month adds 3%.' },
       { key: 'quoteRooted', kind: 'check', label: 'Count cascades rooted at a quote', hint: 'Measured, as lower bounds: a quote late in its parent’s week was followed for less than seven days.' },
       { key: 'replyLed', kind: 'pick', label: 'Reply-led cascades collected', choices: [0, 0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1], fmt: (v) => (v === 0 ? 'none' : v === 1 ? 'all' : 'a random ' + Math.round(100 * v) + '%'),
-        hint: 'Cascades whose retweets hang from the replies, not the root: about a quarter of posts in September, from 11% to 35% by day. A sample checked on X shows nearly all are automated advertising: Chinese-language replies selling sexual services, retweeted by automated accounts. The page opens on a random 2% of them, drawn by root ID before anything is read, so the collection holds every class of cascade and can be weighted back to the whole. Any share above none sets a floor of 100 replies, which search needs to find them; none removes that floor.',
+        hint: 'Cascades whose retweets hang from the replies, not the root: about a quarter of posts, from 11% to 35% by day. A sample checked on X is nearly all automated advertising: Chinese-language replies selling sexual services. The page opens on a random 2%, drawn by root ID before anything is read, which can be weighted back to the roots search returns. Any share above none sets the floor of 100 replies that finds them; none removes it.',
         then: (v) => { if (v > 0 && st.fd === Infinity) st.fd = 100; if (!v) st.fd = Infinity; } },
       { key: 'prize', kind: 'pick', label: 'Prize draws collected', choices: [0, 0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1], fmt: (v) => (v === 0 ? 'none' : v === 1 ? 'all' : 'a random ' + Math.round(100 * v) + '%'),
-        hint: 'Posts that tell readers to follow, repost, reply or quote to enter a draw or get a reward, nearly all from companies. They start 3% of cascades that are not reply-led and 73% of those of 20,000+ posts, and hold 63% of the posts in cascades of 10,000+. Their retweets are timed like any others: people, drawn by a prize. The page opens on a random 2% of them. A prize draw is recognised from the root’s text, which search returns, so one that is left out costs nothing more.' },
+        hint: 'Posts that tell readers to follow, repost, reply or quote to enter a draw or get a reward, nearly all from companies. They start 3% of cascades that are not reply-led and 73% of those of 20,000+ posts, and hold 63% of the posts in cascades of 10,000+. Their retweets are timed like any others: people, drawn by a prize. The page opens on a random 20%: the largest share offered that fits the cap with the reserve kept back. A prize draw is recognised from the root’s text, which search returns, so one that is left out costs nothing more.' },
       { kind: 'facts', id: 'c-facts' },
     ] },
     { title: 'What to collect', controls: [
       { key: 'full', kind: 'pick', label: 'Every post, for cascades of at least', choices: [5000, 6000, 7500, 10000, 12500, 15000, 20000, 30000, 50000, Infinity], fmt: (v) => (v === Infinity ? 'no cascade' : sz(v)) },
-      { key: 'rqAuto', kind: 'check', label: 'Take replies and quotes as low as fits', hint: 'The lowest size that fits the budget, and no lower than the size at which at least 80% of the tier is found. When the budget is not the limit, lower the search floor on retweets to reach further.' },
+      { key: 'rqAuto', kind: 'check', label: 'Take replies and quotes as low as fits', hint: 'The lowest size that fits the budget, and no lower than the size at which at least 75% of the tier is found. When the budget is not the limit, lower the search floor on retweets to reach further.' },
       { key: 'rq', kind: 'log', label: 'Replies and quotes, for cascades of at least', min: 100, max: 20000, fmt: sz, disabled: () => st.rqAuto },
       { key: 'rtMode', kind: 'seg', label: 'Retweets for those cascades', options: [['none', 'Stream only'], ['first', 'First N'], ['sample', 'Sample']],
         hint: 'The 1% stream shows a random 1% of retweets at no cost. First N and Sample buy more.' },
@@ -61,7 +61,7 @@
         hint: 'Replies carry their own counts, so reading them gives a cascade’s size. They cost a unit each even when the cascade turns out too small. By counts: the size is read off the root’s own counts. By stream: off the cascade’s posts in the 1% sample, which needs each sampled post matched to its cascade.' },
       { key: 'theta', kind: 'range', label: 'Likely means an estimated size of at least', min: 0.2, max: 1, step: 0.05, fmt: (v) => Math.round(100 * v) + '% of the second tier', disabled: () => st.triage === 'all' },
       { key: 'recog', kind: 'seg', label: 'Reply-led roots are recognised', options: [['counts', 'From the root’s counts'], ['class', 'Always']],
-        hint: 'From the root’s counts: a root with more than ' + D.rule.ratio + ' replies for each retweet is read as reply-led before its replies are read. On the two days with every post on file this catches ' + Math.round(100 * D.recognition.caught[1]) + ' to ' + Math.round(100 * D.recognition.caught[0]) + '% of the reply-led roots that search returns, and wrongly flags about ' + Math.round(100 * D.recognition.falseFlag[0]) + '% of the others. A reply-led root it misses has its replies read before it is dropped. On those two days that cost 45,000 to 95,000 units a day. For the opening plan this page gives about 18,000 a day over the whole month: reply-led cascades were smaller after the middle of September, and the simulated rows may still put too few replies on these roots. Always: every reply-led root is recognised at no cost.' },
+        hint: 'From the root’s counts: a root with more than ' + D.rule.ratio + ' replies for each retweet is read as reply-led before its replies are read. On the two full days, with floors of 100 retweets or 100 replies, this catches ' + Math.round(100 * D.recognition.at100.caught[1]) + ' to ' + Math.round(100 * D.recognition.at100.caught[0]) + '% of the reply-led roots that search returns, and wrongly flags about ' + Math.round(100 * D.recognition.at100.falseFlag[0]) + '% of the others. A reply-led root it misses has its replies read before it is dropped; the notes give what that costs. Always: every reply-led root is recognised at no cost.' },
       { key: 'passes', kind: 'range', label: 'Search passes for each day of roots', min: 1, max: 3, step: 1, fmt: (v) => { const n = Math.min(v, st.window); return n === 1 ? 'once' : n === 2 ? 'twice' : '3 times'; }, hint: 'The last pass is at the end of the window, earlier ones at 24 and 48 hours, so a one-day window has one pass. Each pass returns every root again.' },
     ] },
   ];
@@ -112,7 +112,7 @@
   const nPass = () => Math.min(st.passes, st.window);   // a pass a day at most
   const opts = (over) => Object.assign({ full: st.full, rq: st.rq, passes: nPass(), fr: st.fr, fd: st.fd, triage: st.triage, theta: st.theta, recog: st.recog, rtMode: st.rtMode, rtN: st.rtN, rtRate: st.rtRate, stream: st.stream }, over || {});
   const budget = () => Math.max(0, st.cap - st.reserve);
-  const FOUND_MIN = 0.8;   // the automatic second tier stops where search finds less than this share of it
+  const FOUND_MIN = 0.75;  // the automatic second tier stops where search finds less than this share of it (0.8 until 24 November 2026; with floors of 100 search finds 77% of the cascades of 100 to 9,999 posts)
   const roundUp = (v) => { const p = v < 1000 ? 10 : v < 10000 ? 50 : v < 100000 ? 500 : 5000; return Math.ceil(v / p - 1e-9) * p; };
   const top2 = () => (st.full === Infinity ? 1e6 : st.full);
   function derive() {
@@ -133,20 +133,23 @@
   const bought = () => (st.rtMode === 'first' ? 'the first ' + int(st.rtN) + ' retweets of each' : st.rtMode === 'sample' ? 'a random ' + Math.round(100 * st.rtRate) + '% of their retweets' : '');
   const floorsTxt = () => int(st.fr) + ' retweets' + (st.fd === Infinity ? '' : ' or ' + int(st.fd) + ' replies') + ' of their own';
   const bar = (r) => int(roundUp(st.theta * r.rq));
-  function recipe(r, hasT1, hasT2) {
-    const parts = ['Each day, search for roots posted ' + agesTxt() + ' earlier that have at least ' + floorsTxt() + '.',
-      st.triage === 'all' ? 'Read the replies of every root returned: each reply carries its own counts, and their sum is the cascade’s size.'
-        : st.triage === 'stream' ? 'Where the 1% stream holds enough of a cascade’s posts to suggest ' + bar(r) + '+ posts, read its replies: each carries its own counts, and their sum is the cascade’s size.'
-        : 'Where a root’s counts suggest a cascade of ' + bar(r) + '+ posts, read its replies: each carries its own counts, and their sum is the cascade’s size.'];
-    if (st.replyLed > 0 && st.replyLed < 1) { const q = reachOf('led', r);
-      parts.splice(1, 0, (st.recog === 'counts' ? 'A root with more than ' + D.rule.ratio + ' replies for each retweet is read as reply-led. ' : 'Reply-led roots are taken as recognised when search returns them. ')
-        + 'Keep a random ' + Math.round(100 * st.replyLed) + '% of those roots, and of the roots returned for their replies alone, drawn by root ID; set the rest aside unread. Each one kept stands for ' + int(Math.round(1 / st.replyLed)) + ' of the roots search returns. Those are ' + pct(q.read) + ' of the reply-led cascades of ' + int(q.lo) + '+ posts, so the sample cannot stand for the rest.'); }
+  function recipe(r, hasT1, hasT2, tail) {
+    const steps = [['Search', 'Each day, search for roots posted ' + agesTxt() + ' earlier with at least ' + floorsTxt() + '.']], aside = [];
+    const sample = (share) => 'keep a random ' + Math.round(100 * share) + '%, drawn by root ID, and leave the rest unread. Each one kept stands for ' + int(Math.round(1 / share)) + ' returned; ';
     if (st.prize < 1) { const q = st.prize > 0 ? reachOf('prize', r) : null;
-      parts.splice(1, 0, 'A root whose text gives entry steps for a draw or a reward is a prize draw. ' + (st.prize > 0 ? 'Keep a random ' + Math.round(100 * st.prize) + '% of them, drawn by root ID, and set the rest aside unread. Each one kept stands for ' + int(Math.round(1 / st.prize)) + ' of those returned, which are ' + pct(q.read) + ' of the prize draws of ' + int(q.lo) + '+ posts.' : 'Set them aside unread.')); }
-    if (hasT1) parts.push('For cascades of ' + int(st.full) + '+ posts, fetch every quote and retweet.');
-    if (hasT2) parts.push('For cascades of ' + int(r.rq) + '+ posts, fetch the quotes' + (st.rtMode === 'none' ? '; their retweets come from the 1% stream only.' : ' and ' + bought() + '.'));
-    parts.push('This finds ' + pct(r.found) + ' of the cascades wanted. Check what search found against the 1% stream.');
-    return parts.join(' ');
+      aside.push('Prize draws (the root’s text gives entry steps for a draw or a reward): ' + (st.prize > 0 ? sample(st.prize) + 'search returns ' + pct(q.read) + ' of the prize draws of ' + int(q.lo) + '+ posts.' : 'leave them unread.')); }
+    if (st.replyLed > 0 && st.replyLed < 1) { const q = reachOf('led', r);
+      aside.push('Reply-led roots (' + (st.recog === 'counts' ? 'more than ' + D.rule.ratio + ' replies for each retweet' : 'taken as recognised') + ', or returned for their replies alone): ' + (st.prize > 0 && st.prize === st.replyLed ? 'keep a random ' + Math.round(100 * st.replyLed) + '% the same way; ' : sample(st.replyLed)) + 'search returns ' + pct(q.read) + ' of the reply-led cascades of ' + int(q.lo) + '+ posts, and the sample cannot stand for the rest.'); }
+    if (aside.length) steps.push(['Set aside and sample', aside.join(' ')]);
+    steps.push(['Size', (st.triage === 'all' ? 'Read the replies of every root returned: each'
+      : st.triage === 'stream' ? 'Where the 1% stream holds enough of a cascade’s posts to suggest ' + bar(r) + '+ posts, read its replies: each'
+      : 'Where a root’s counts suggest ' + bar(r) + '+ posts, read its replies: each') + ' carries its own counts, and their sum is the cascade’s size.']);
+    const collect = [];
+    if (hasT1) collect.push('For cascades of ' + int(st.full) + '+ posts, fetch every quote and retweet.');
+    if (hasT2) collect.push('For cascades of ' + int(r.rq) + '+ posts, fetch the quotes' + (st.rtMode === 'none' ? '; their retweets come from the 1% stream only.' : ' and ' + bought() + '.'));
+    if (collect.length) steps.push(['Collect', collect.join(' ')]);
+    steps.push(['Result', 'This finds ' + pct(r.found) + ' of the cascades wanted; check what search found against the 1% stream.' + (tail || '')]);
+    return steps.map(([k, v]) => '<li><b>' + k + '.</b> ' + v + '</li>').join('');
   }
 
   /* ====================================================================== figures */
@@ -324,34 +327,33 @@
       st.prize > 0 && st.prize < 1 ? (() => { const q = reachOf('prize', r); return [['Prize draws of ' + int(q.lo) + '+ that the sample can reach', pct(q.read) + ' of ' + big(q.n)]]; })() : []).map(([k, v]) => '<dt>' + k + '</dt><dd>' + v + '</dd>').join('');
     const pill = document.getElementById('c-pill'); pill.className = 'pill ' + (fits ? 'ok' : 'short'); pill.textContent = fits ? 'Fits the cap' : 'Over the cap';
     const rqWords = st.rtMode === 'first' ? 'replies, quotes and first ' + int(st.rtN) + ' retweets' : st.rtMode === 'sample' ? 'replies, quotes and a random ' + Math.round(100 * st.rtRate) + '% of the retweets' : 'replies and quotes';
-    const subject = hasT1 && hasT2 ? 'Every post of ' + big(c1) + ' cascades of ' + int(st.full) + '+ posts, and the ' + rqWords + ' of ' + big(c2) + ' more down to ' + int(r.rq) + ' posts,'
-      : hasT1 ? 'Every post of ' + big(c1) + ' cascades of ' + int(st.full) + '+ posts'
-      : hasT2 ? 'The ' + rqWords + ' of ' + big(c2) + ' cascades of ' + int(r.rq) + '+ posts'
+    const subject = hasT1 && hasT2 ? 'Every post for ' + big(c1) + ' cascades of ' + int(st.full) + '+ posts, plus ' + rqWords + ' for ' + big(c2) + ' more down to ' + int(r.rq) + ' posts'
+      : hasT1 ? 'Every post for ' + big(c1) + ' cascades of ' + int(st.full) + '+ posts'
+      : hasT2 ? rqWords.charAt(0).toUpperCase() + rqWords.slice(1) + ' for ' + big(c2) + ' cascades of ' + int(r.rq) + '+ posts'
       : 'Search by counts alone';
-    const plural = hasT2;
-    document.getElementById('c-headline').textContent = subject + (fits ? (plural ? ' cost ' : ' costs ') + big(r.total) + ' units a month, ' + pct(r.total / st.cap) + ' of the cap.'
-      : (plural ? ' need ' : ' needs ') + big(r.total) + ' units a month, ' + (budget() > 0 ? 'more than the ' + big(budget()) + ' available.' : 'and the reserve takes the whole cap.'));
+    document.getElementById('c-headline').textContent = subject + ': ' + big(r.total) + ' units a month, ' + (fits ? pct(r.total / st.cap) + ' of the cap.'
+      : budget() > 0 ? 'more than the ' + big(budget()) + ' available.' : 'and the reserve takes the whole cap.');
     let fix = '';
     if (!fits) {
       const e = CASCADE.lowest(pop, opts(), 'rq', budget(), 100, top2()), g = CASCADE.lowest(pop, opts({ rq: Infinity }), 'full', budget(), 1000, 1e6);
       fix = e != null ? ' Replies and quotes fit from about ' + int(roundUp(e)) + '+ posts.' : g != null ? ' Every post alone fits only from about ' + int(roundUp(g)) + '+ posts.' : '';
     }
     if (st.window < 7) fix += ' A ' + ['', 'one', 'two', 'three'][st.window] + '-day window holds ' + pct(pop.share) + ' of the posts these cascades have in seven days, and ' + pct(D.passed10k[24 * st.window]) + ' of the seven-day cascades of 10,000+ reach 10,000 in it.';
-    document.getElementById('c-recipe').textContent = recipe(r, hasT1, hasT2) + fix;
+    document.getElementById('c-recipe').innerHTML = recipe(r, hasT1, hasT2, fix);
     const k = [
       ['Cascades collected in full', hasT1 ? big(c1) : 'none', hasT1 ? int(st.full) + '+ posts; ' + big(r.cost1) + ' units; ' + pct(r.found1) + ' of them found' : 'no size chosen'],
       [st.rtMode === 'none' ? 'With replies and quotes only' : 'With replies, quotes and some retweets', hasT2 ? big(c2) : 'none', hasT2 ? 'down to ' + int(r.rq) + ' posts; ' + big(r.cost2 + r.bought) + ' units; ' + pct(r.found2) + ' of them found' : 'no second tier'],
       ['Units spent a month', big(r.total), pct(r.total / st.cap) + ' of the cap' + (st.reserve ? '; ' + big(st.reserve) + ' in reserve' : '')],
-      ['Spent finding and sizing', big(r.finding + r.waste), big(r.roots) + ' roots returned; ' + big(r.waste) + ' units on replies of cascades too small' + (r.stray >= 0.5 ? ' or reply-led, ' + big(r.strayUnits) + ' of them on ' + big(r.stray) + ' reply-led roots not recognised from their counts' : '')],
+      ['Spent finding and sizing', big(r.finding + r.waste), big(r.roots) + ' roots returned; ' + (r.stray >= 0.5 && r.strayUnits >= 0.98 * r.waste ? big(r.waste) + ' units on replies of ' + big(r.stray) + ' reply-led roots the rule missed' : big(r.waste) + ' units on replies of cascades too small' + (r.stray >= 0.5 ? ' or reply-led (' + big(r.strayUnits) + ' on ' + big(r.stray) + ' reply-led roots the rule missed)' : ''))],
     ];
     document.getElementById('c-kpis').innerHTML = k.map(([a, b, s]) => '<div class="kpi"><div class="k">' + a + '</div><div class="v">' + b + '</div><div class="s">' + s + '</div></div>').join('');
     document.getElementById('c-sub-flow').textContent = 'The plan in the headline, step by step, in numbers a month. One unit is the charge for one post returned.';
     document.getElementById('c-sub-mix').textContent = 'The bar shows where the cap goes. Below it, each tier’s posts, with the downloaded part solid. Retweets are ' + pct(1 - pop.RQ(1000) / pop.P(1000)) + ' of the posts in cascades of 1,000+, so collecting them for every cascade is what does not fit.';
     const fitAll = CASCADE.lowest(pop, opts({ rq: Infinity, found: 'all' }), 'full', st.cap, 1000, 1e6), fitRQ = CASCADE.lowest(pop, opts({ full: Infinity, found: 'all' }), 'rq', st.cap, 100, 1e6);
-    document.getElementById('c-sub-fit').textContent = 'Units a month against the smallest cascade collected, if every cascade were found at no cost. On that footing every post fits the cap from about ' + (fitAll ? int(roundUp(fitAll)) : '?') + '+ posts, and replies and quotes from about ' + (fitRQ ? int(roundUp(fitRQ)) + '+' : '?') + '. The black line is your plan, with finding and sizing counted, as its second tier reaches lower.';
+    document.getElementById('c-sub-fit').textContent = 'Units a month against the smallest cascade collected, if every cascade were found at no cost. Then every post fits the cap from about ' + (fitAll ? int(roundUp(fitAll)) : '?') + '+ posts, and replies and quotes from about ' + (fitRQ ? int(roundUp(fitRQ)) + '+' : '?') + '. The black line is your plan, with finding and sizing counted, as its second tier reaches lower.';
     document.getElementById('c-sub-grow').textContent = 'Median share of a cascade’s seven-day size reached by each hour. The median cascade has about 99% of it at 48 hours. Of the cascades that end at 10,000+ posts, ' + pct(D.passed10k[24]) + ' have passed 10,000 by 24 hours, ' + pct(D.passed10k[48]) + ' by 48 and ' + pct(D.passed10k[72]) + ' by 72.';
-    document.getElementById('c-sub-find').textContent = 'By cascade size: the share that search returns with these floors, and the share whose replies are then read. A cascade is missed when its size sits on its replies and the root stays under ' + (st.fd === Infinity ? 'the floor' : 'both floors') + ', or when the root’s counts make it look too small to size. The grey line is the chance that the 1% stream samples at least one of its posts.' + (st.replyLed > 0 && st.replyLed < 1 ? ' The dashed line is the share of all reply-led cascades that search returns. The sample is drawn from those, so it says nothing about the small ones search does not return.' : '');
-    document.getElementById('c-foot-build').textContent = 'Cascade view, seventh version · 24 November 2026. Sizes, replies and quotes were counted by Prof. Toyoda’s group on the full Japanese stream for September 2026: ' + int(D.main.n100) + ' cascades of 100+ posts rooted at an original post, holding ' + big(D.main.posts100) + ' posts, and ' + int(D.quote.n100) + ' rooted at a quote. The page works on simulated cascades that match those counts; no row is a real cascade. Root counts and the reply-led class come from models fitted to the two days for which every post is on file; prize draws come from a topic study of 3,974 sampled roots. Since the sixth version a reply-led root is recognised from its counts, not taken as known, and the page shows how much of each sampled class the sample can reach. Since the seventh the retweets and replies on an original-post root are drawn together from the two full days’ counts; before, too many ordinary roots looked reply-led.';
+    document.getElementById('c-sub-find').textContent = 'By cascade size: the share search returns with these floors, and the share whose replies are then read. A cascade is missed when its size sits on its replies and the root stays under ' + (st.fd === Infinity ? 'the floor' : 'both floors') + ', or when the root’s counts make it look too small to size. The grey line is the chance that the 1% stream samples at least one of its posts.' + (st.replyLed > 0 && st.replyLed < 1 ? ' The dashed line is the share of all reply-led cascades that search returns; the sample is drawn from those and says nothing about the rest.' : '');
+    document.getElementById('c-foot-build').innerHTML = '<b>Version.</b> Cascade view, eighth version · 24 November 2026. Counted by Prof. Toyoda’s group on the full Japanese stream: ' + int(D.main.n100) + ' cascades of 100+ posts rooted at an original post, holding ' + big(D.main.posts100) + ' posts, and ' + int(D.quote.n100) + ' rooted at a quote. Sixth version: a reply-led root is recognised from its counts, not taken as known, and the page shows how much of each sampled class the sample can reach. Seventh: the retweets and replies on an original-post root are drawn together; before, too many ordinary roots looked reply-led. Eighth: the page opens on a plan that reaches down to 100 posts and keeps 20% of prize draws; before, 300 posts and 2%.';
     drawFlow(r, hasT1, hasT2, fits); drawCap(r, fits); drawTiers(r, hasT1, hasT2); drawFit(r, hasT2); drawGrow(); drawFind();
   }
 

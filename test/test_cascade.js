@@ -119,9 +119,9 @@ const but = (o) => Object.assign({}, base, o);
   const ra = C.plan(all, o), rn = C.plan(none, o);
   check('search returns the same roots with prize draws left out', rn.roots, ra.roots, 1e-6);
   yes('without prize draws the cascades in full cost less than half as much', rn.cost1 < 0.5 * ra.cost1 && rn.cost1 > 0.3 * ra.cost1);
-  // the page's opening plan: a random 2% of reply-led cascades and of prize draws, floors of 300 retweets or 100 replies, second tier from 300 posts
+  // the page's opening plan until the eighth version: a random 2% of reply-led cascades and of prize draws, floors of 300 retweets or 100 replies, second tier from 300 posts
   const open = C.population({ window: 3, replyLed: 0.02, prize: 0.02 }), oo = Object.assign({}, o, { fd: 100 }), ro = C.plan(open, oo), rin = C.plan(C.population({ window: 3, replyLed: 0.02 }), oo);
-  yes('the opening plan reaches 300 posts for 55M to 70M units, with at least 80% of the second tier found', ro.total > 55e6 && ro.total < 70e6 && ro.found2 >= 0.8);
+  yes('the earlier opening plan reaches 300 posts for 55M to 70M units, with at least 80% of the second tier found', ro.total > 55e6 && ro.total < 70e6 && ro.found2 >= 0.8);
   yes('the same reach with every prize draw collected is over the cap', rin.total > 100e6); }
 
 // a cascade whose size sits on its replies: the root's retweet count does not find it
@@ -196,7 +196,7 @@ const but = (o) => Object.assign({}, base, o);
   // on the September population
   const pop = C.population({ window: 3, replyLed: 0.02, prize: 0.02 });
   const pc = C.plan(pop, Object.assign({}, o, { recog: 'class' })), pk = C.plan(pop, Object.assign({}, o, { recog: 'counts' }));
-  within('the opening plan with reply-led roots taken as known (62.91M on the rows before the seventh version)', pc.total / M, 62.34, 0.002);
+  within('the seventh version’s opening plan with reply-led roots taken as known (62.91M on the rows before it)', pc.total / M, 62.34, 0.002);
   within('and with reply-led roots recognised from counts', pk.total / M, 62.88, 0.002);
   { const T = C.TABLES.rows; let ro = 0, fo = 0; for (let i = 0; i < T.w.length; i++) { if (T.q[i] || T.led[i]) continue; const f = T.s3[i] / T.s7[i], r0 = T.r0[i] * f, d0 = T.d0[i] * f; if (r0 >= 300 || d0 >= 100) { ro += T.w[i]; if (d0 > 5 * r0) fo += T.w[i]; } }
     yes('ordinary roots wrongly flagged as reply-led: 4 to 7% of those returned (measured 4.3% and 4.6%)', fo / ro > 0.04 && fo / ro < 0.07); }
@@ -212,6 +212,18 @@ const but = (o) => Object.assign({}, base, o);
   within('reach counts the class whatever share is kept', C.reach(C.population({ window: 3, replyLed: 0.2, prize: 0.02 }), o, 'led', [100, 1e9])[0].n, rAll.n, 1e-9);
   within('found by size gives the same reply-led reach', (() => { const f = C.foundBySize(pop, o, [100, 1e9])[0]; return f.ledReturned; })(), rAll.returned, 1e-9);
   yes('prize draws of 1,000+ are all within reach', C.reach(pop, o, 'prize', [1000, 1e9])[0].read > 0.99); }
+
+// the page's opening plan since the eighth version: second tier down to 100 posts, floors of 100 retweets or 100 replies, 20% of prize draws
+{ const M = 1e6, o = { full: 10000, rq: 100, passes: 3, fr: 100, fd: 100, triage: 'counts', theta: 0.5, rtMode: 'none', stream: 0.01, recog: 'counts' };
+  const pop = C.population({ window: 3, replyLed: 0.02, prize: 0.2 }), r = C.plan(pop, o);
+  within('the opening plan: down to 100 posts, with 20% of prize draws', r.total / M, 89.66, 0.002);
+  yes('it fits the 90M left after a reserve of 10M', r.total <= 90e6);
+  yes('100 posts is the lowest second tier that fits', C.lowest(pop, o, 'rq', 90e6, 100, 10000) <= 100.5);
+  yes('half of the prize draws would not fit', C.plan(C.population({ window: 3, replyLed: 0.02, prize: 0.5 }), o).total > 90e6);
+  yes('search finds 75% to 80% of the second tier', r.found2 > 0.75 && r.found2 < 0.8);
+  const b = C.foundBySize(pop, o, [100, 300, 1000, 1e12]);
+  yes('68% of cascades of 100 to 299 posts are found, 97% of 300 to 999', Math.abs(b[0].found - 0.68) < 0.02 && Math.abs(b[1].found - 0.97) < 0.02);
+  check('search still returns about a quarter of all reply-led cascades (measured at these floors: 25.5% and 25.7%)', C.reach(pop, o, 'led', [100, 1e9])[0].returned, 0.256, 0.02); }
 
 check('1% stream sees a 100-post cascade', C.binomSf(1, 100, 0.01), 0.634, 0.001);
 check('at least no sampled posts is certain', C.binomSf(0, 100, 0.01), 1, 0);

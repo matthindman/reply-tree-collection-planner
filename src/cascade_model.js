@@ -55,7 +55,8 @@
      100 replies read at 72 hours. returned: the share of all reply-led cascades of 100+ that search returns.
      caught: of the reply-led roots returned, the share the count rule reads as reply-led. falseFlag: of the other roots
      returned, the share it wrongly reads as reply-led. */
-  DATA.recognition = { returned: [0.248, 0.251], returned300to999: 0.259, returned1000to2999: [0.81, 0.88], caught: [0.83, 0.80], falseFlag: [0.043, 0.046] };
+  DATA.recognition = { returned: [0.248, 0.251], returned300to999: 0.259, returned1000to2999: [0.81, 0.88], caught: [0.83, 0.80], falseFlag: [0.043, 0.046],
+    at100: { returned: [0.255, 0.257], returned300to999: [0.277, 0.276], returned1000to2999: [0.82, 0.89], caught: [0.81, 0.78], falseFlag: [0.016, 0.017] } };   // the first set is for floors of 300 retweets or 100 replies, at100 for 100 or 100
   const bin = (edges, v) => { let i = edges.length - 1; while (i > 0 && v < edges[i]) i--; return i; };
   function prizeShare(i) {                                   // row i of the table: the share of it that is prize draws
     if (R.led[i]) return 0;

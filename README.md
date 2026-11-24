@@ -14,10 +14,13 @@ Japanese X today" (about 12% of replies in conversations of 100+ posts); the oth
   (counts, totals and histograms) of groups of at least 100 real cascades in 30 daily summaries for
   September 2026, and reproduce the measured counts and post totals by size to within about 1%. Each
   row's class (root-led or reply-led) and its root's own counts come from fitted models. The page opens
-  on a plan that collects a random 2% of the reply-led cascades (a sample checked on X is automated
-  advertising) and a random 2% of prize draws ("follow and repost to win"), both drawn by root ID,
-  and searches by the root's retweet count (300+) or reply count (100+); a slider sets each share,
-  from none to all. Which rows are prize draws comes from a topic study's shares by size. Since the sixth
+  on a plan that takes every post of cascades of 10,000+ posts and the replies and quotes of cascades
+  down to 100 posts (89.7M units of the 90M left after the reserve; since the eighth version, 24
+  November 2026). It collects a random 2% of the reply-led cascades (a sample checked on X is automated
+  advertising) and a random 20% of prize draws ("follow and repost to win"), the largest share offered
+  that fits, both drawn by root ID, and searches by the root's retweet count (100+) or reply count
+  (100+), which finds 77% of the cascades of 100 to 9,999 posts; a slider sets each share, from none
+  to all. Which rows are prize draws comes from a topic study's shares by size. Since the sixth
   version (24 November 2026) a reply-led root is recognised from its counts (more than
   five replies for each retweet), not taken as known: one that the rule misses has its replies read
   before it is dropped, one that it wrongly flags is set aside unless sampled, and one draw is made for
@@ -27,7 +30,7 @@ Japanese X today" (about 12% of replies in conversations of 100+ posts); the oth
   (24 November 2026) the retweets and replies on an original-post root are drawn together, from
   histograms of the two days with every post on file in groups of 100+ cascades; before, the three root
   counts were drawn independently and 10% of ordinary roots looked reply-led where 4 to 5% was measured
-  (now 6%). The opening plan is 62.9M units. One known gap against the two measured days: the rows give
+  (now 6%; these figures are for floors of 300 retweets or 100 replies, the seventh version's opening plan, which cost 62.9M units). One known gap against the two measured days at those floors: the rows gave
   0.54M units a month for reply-led roots read before they are recognised where those days give about
   1.4M to 2.9M. The reach among reply-led cascades of 300 to 999 posts is near 40% on this page and 26%
   on the two measured days (roots of 2 and 3 September); that is a difference between those days and the 30 files (roots of 25 August to 23 September), not an
