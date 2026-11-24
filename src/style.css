@@ -98,6 +98,8 @@ details.more[open] > summary { margin-bottom: 10px; }
 .card > h3 { font-size: 16px; font-weight: 600; margin: 0 0 2px; letter-spacing: -0.005em; }
 .card p.sub { margin: 0 0 12px; color: var(--ink-2); font-size: 13px; max-width: 78ch; }
 .pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; }
+.pair > .card { display: flex; flex-direction: column; }
+.pair > .card > .chart { margin-top: auto; }   /* the two charts sit on one baseline whatever the length of the text above them */
 @media (max-width: 1180px) { .pair { grid-template-columns: minmax(0, 1fr); } }
 .chart { position: relative; width: 100%; }
 .chart svg { display: block; width: 100%; height: auto; overflow: visible; }

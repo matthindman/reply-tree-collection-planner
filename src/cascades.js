@@ -32,7 +32,7 @@
   const GROUPS = [
     { title: 'The contract', controls: [
       { key: 'cap', kind: 'log', label: 'Monthly cap, in units', min: 1e7, max: 1e9, fmt: big, hint: 'One unit is the charge for one post returned.' },
-      { key: 'reserve', kind: 'range', label: 'Kept in reserve', min: 0, max: 3e7, step: 1e6, fmt: (v) => (v ? big(v) : 'none'), hint: 'For daily spikes, the largest cascades and lookups.' },
+      { key: 'reserve', kind: 'range', label: 'Kept in reserve', min: 0, max: 3e7, step: 1e6, fmt: (v) => (v ? big(v) : 'none'), hint: 'For daily spikes, the largest cascades and lookups. By the day its roots were posted, the opening plan costs 1.7M to 2.6M units a day; a month at the rate of its dearest seven days in a row is 68M.' },
       { key: 'window', kind: 'seg', label: 'Window after the root is posted', options: [[1, '1 day'], [2, '2 days'], [3, '3 days'], [7, '7 days']], hint: 'Posts after the window are not collected. Sizes at each window are measured.' },
     ] },
     { title: 'Volumes', controls: [
@@ -159,7 +159,7 @@
       { title: 'Read replies to size', color: TIER.waste, lines: [how, big(r.sized) + ' cascades sized', big(r.waste) + ' units on small ones'] },
       hasT1 ? { title: 'In full, ' + int(st.full) + '+', color: TIER.full, lines: ['every post', big(r.n1 + r.q1) + ' cascades', 'costs ' + big(r.cost1) + ' units'] }
             : { title: 'No cascade in full', dashed: true, lines: ['no size chosen', 'for every post', 'costs nothing'] },
-      hasT2 ? { title: 'Replies, quotes, ' + int(r.rq) + '+', color: TIER.rq, lines: [st.rtMode === 'none' ? 'retweets: 1% stream only' : st.rtMode === 'first' ? 'and first ' + int(st.rtN) + ' retweets' : 'and ' + Math.round(100 * st.rtRate) + '% of retweets', big(r.n2 + r.q2) + ' cascades', 'costs ' + big(r.cost2 + r.bought) + ' units'] }
+      hasT2 ? { title: 'Replies, quotes, ' + int(r.rq) + '+', color: TIER.rq, lines: [st.rtMode === 'none' ? 'retweets: 1% stream' : st.rtMode === 'first' ? 'and first ' + int(st.rtN) + ' retweets' : 'and ' + Math.round(100 * st.rtRate) + '% of retweets', big(r.n2 + r.q2) + ' cascades', 'costs ' + big(r.cost2 + r.bought) + ' units'] }
             : { title: 'No second tier', dashed: true, lines: hasT1 ? ['nothing below', 'the cascades in full', 'costs nothing'] : ['nothing fits', 'under this cap', 'costs nothing'] },
       { title: 'Collected', color: col, fill: true, lines: [big(r.n1 + r.q1 + r.n2 + r.q2) + ' cascades a month', pct(r.found) + ' of those wanted', big(r.total) + ' units, ' + pct(r.total / st.cap) + ' of cap'] },
     ];
@@ -169,7 +169,8 @@
     const box = (b, x, y, w) => {
       el('rect', { x, y, width: w, height: BH, rx: 9, fill: b.fill ? b.color : 'var(--surface)', 'fill-opacity': b.fill ? 0.12 : 1, stroke: b.color || 'var(--line-2)', 'stroke-width': b.color ? 1.75 : 1.25, 'stroke-dasharray': b.dashed ? '4 4' : null }, f.svg);
       el('text', { x: x + 12, y: y + 24, class: 'strong', style: 'font-size:12.5px' }, f.svg, b.title);
-      b.lines.forEach((t, i) => el('text', { x: x + 12, y: y + 42 + 16 * i, style: i === 2 ? 'fill:var(--ink)' : '' }, f.svg, t));
+      b.lines.forEach((t, i) => { const tx = el('text', { x: x + 12, y: y + 42 + 16 * i, style: i === 2 ? 'fill:var(--ink)' : '' }, f.svg, t), len = tx.getComputedTextLength ? tx.getComputedTextLength() : 0;
+        if (len > w - 22) tx.style.fontSize = Math.max(9.5, 11.5 * (w - 22) / len).toFixed(1) + 'px'; });   // a line too long for a narrow box is set smaller, never clipped
     };
     const arrow = (d) => el('path', { d, fill: 'none', stroke: 'var(--ink-3)', 'stroke-width': 1.25, 'marker-end': 'url(#' + uid + ')' }, f.svg);
     if (wide) {
@@ -202,7 +203,7 @@
     if (hasT1) rows.push(['In full', int(st.full) + '+ posts', r.A, r.cost1, TIER.full, r.n1 + r.q1, pct(r.found1) + ' of ' + big(r.want1) + ' found']);
     if (hasT2) rows.push(['Replies and quotes', int(r.rq) + ' to ' + (st.full === Infinity ? 'the largest' : int(st.full - 1)), r.B, r.cost2 + r.bought, TIER.rq, r.n2 + r.q2, pct(r.found2) + ' of ' + big(r.want2) + ' found' + (st.rtMode === 'none' ? '' : ', with ' + big(r.bought) + ' retweets')]);
     if (!rows.length) rows.push(['Nothing collected', 'no tier chosen', 1, 0, TIER.reserve, 0, '']);
-    const rowH = 50, f = frame('c-mix', rows.length * rowH + 34, 'Posts in each tier and how many of them are downloaded');
+    const rowH = 50, f = frame('c-mix', rows.length * rowH + 46, 'Posts in each tier and how many of them are downloaded');
     const wide = f.w >= 620, m = { l: wide ? 150 : 4, r: wide ? 232 : 64, t: 4 }, x0 = m.l, x1 = f.w - m.r, max = Math.max.apply(null, rows.map((x) => x[2])), X = lin(0, max, x0, x1), yb = m.t + rows.length * rowH;
     rows.forEach(([name, range, all, got, col, n, note], i) => {
       const y = m.t + i * rowH, top = y + (wide ? 12 : 20);

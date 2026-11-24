@@ -30,7 +30,7 @@ Japanese X today" (about 12% of replies in conversations of 100+ posts); the oth
   (now 6%). The opening plan is 62.9M units. One known gap against the two measured days: the rows give
   0.54M units a month for reply-led roots read before they are recognised where those days give about
   1.4M to 2.9M. The reach among reply-led cascades of 300 to 999 posts is near 40% on this page and 26%
-  on the two measured days; that is a difference between early September and the whole month, not an
+  on the two measured days (roots of 2 and 3 September); that is a difference between those days and the 30 files (roots of 25 August to 23 September), not an
   error in the rows, as the sixth version's text had it. The table is
   generated outside this folder and is not meant to be edited by hand. The arithmetic is `src/cascade_model.js`, the view
   `src/cascades.js` (defaults in `DEFAULTS`), checked by `node test/test_cascade.js`.
