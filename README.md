@@ -17,7 +17,16 @@ Japanese X today" (about 12% of replies in conversations of 100+ posts); the oth
   on a plan that collects a random 2% of the reply-led cascades (a sample checked on X is automated
   advertising) and a random 2% of prize draws ("follow and repost to win"), both drawn by root ID,
   and searches by the root's retweet count (300+) or reply count (100+); a slider sets each share,
-  from none to all. Which rows are prize draws comes from a topic study's shares by size. The table is
+  from none to all. Which rows are prize draws comes from a topic study's shares by size. Since the sixth
+  version (24 November 2026) a reply-led root is recognised from its counts (more than
+  five replies for each retweet), not taken as known: one that the rule misses has its replies read
+  before it is dropped, one that it wrongly flags is set aside unless sampled, and one draw is made for
+  each root (`recog` in `plan()`; `'class'` gives the earlier arithmetic and its 62.9M units). The page
+  also shows how much of each sampled class the sample can reach (`reach()`): the sample is drawn from
+  the roots search returns, about a quarter of all reply-led cascades. Two known gaps against the two
+  measured days: the simulated root counts give 0.26M units a month for reply-led roots read before
+  they are recognised where the measured days give about 1.4M to 2.9M, and they put the reach among
+  reply-led cascades of 300 to 999 posts near 40% where 26% was measured. The table is
   generated outside this folder and is not meant to be edited by hand. The arithmetic is `src/cascade_model.js`, the view
   `src/cascades.js` (defaults in `DEFAULTS`), checked by `node test/test_cascade.js`.
   The measured cascades themselves are confidential and are not in this repository; only aggregate

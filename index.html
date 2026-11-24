@@ -257,6 +257,8 @@ table.ptable tr.sec td { border-top: 1px solid var(--line-2); padding-top: 12px;
           <li>In reply-led cascades the replies arrive in bursts within the same second, and each is retweeted about 10 times and almost never more than 40. A sample was checked on X in November 2026. The replies are Chinese-language advertisements for sexual services, posted and retweeted by automated accounts under popular Chinese-language posts. None of 100 sampled replies was still visible, and all 25 whose text could be recovered were stock advertising lines. The post at the top is usually an ordinary post whose author has no part in it. One or two in a hundred of these replies are ordinary: threads and fan replies in Japanese. The plan shown first collects a random 2% of them, drawn by root ID before anything is read, so that the class can be weighted back to its full size; a floor of 100 replies on the root is what finds them. With the share set to none, that floor is not used: on the two full days a search by 500 retweets alone returned 98% of the other cascades of 1,000+ posts and 1% of the advertising ones. Reply-led cascades that are not advertising, about 1% of posts in cascades of 100+, are sampled or left out with them. The 1% stream carries their retweets either way.</li>
           <li>A prize draw is a post that tells readers to follow, repost, reply or quote in order to enter a draw or receive a reward. In a topic study of 3,974 sampled roots for September 2026 they start 3% of the cascades that are not reply-led, 49% of those of 10,000 to 19,999 posts and 73% of those of 20,000+, and they hold 63% of the posts in cascades of 10,000+. Nearly all are run by companies (96% of those sampled). On the two full days their retweets are timed exactly as chance predicts for their rate and fall off at night, so the participants are people, drawn by the prize. The plan shown first collects a random 2% of them. A prize draw is recognised from the root’s text, which search returns with the root; one that is left out is not read or fetched. Which simulated cascades are prize draws is set by size alone, from the study’s shares, so the plans show what leaving them out frees, not which cascades they are.</li>
           <li>Reading replies by counts: a root with more than five replies for each retweet is read as reply-led, with a size of its counts plus 4.25 times its replies; any other root is read as its counts alone. By stream: the size is 100 times the cascade's posts in the 1% sample, which needs each sampled post matched to its cascade; that has not been tried.</li>
+          <li>Recognising a reply-led root: the same five-to-one rule, applied to the root's counts when search returns it. On the two days with every post on file it catches 80 to 83% of the reply-led roots that search returns and wrongly flags about 4% of the others. A reply-led root it misses is read and then dropped; a root it wrongly flags is set aside unless it is in the sample.</li>
+          <li>What a sample can stand for: the reply-led sample is drawn from the roots search returns. With floors of 300 retweets or 100 replies those were a quarter of all reply-led cascades of 100+ posts on the two measured days: 26% of those from 300 to 999 posts at three days, 81 to 88% from 1,000 to 2,999, and all from 3,000 up. The simulated root counts on this page put the 300 to 999 figure nearer 40%. Weights from the sample apply to the returned roots only; an independent route, such as the 1% stream, is needed to measure the rest.</li>
           <li>Costs are in units. One unit is the charge for one post returned. Each search pass is charged one unit for every root returned, taken as every root that passes a floor by the end of the window. Replies and other posts that pass the same floors, and lookups, are not costed. A shorter window is taken to scale a cascade's replies, quotes and root counts in step with its size.</li>
           <li>Roots whose cascades never reached 100 posts are not in the files. A floor below 100 would return some of them; the floors offered here do not.</li>
           <li>The stream-only design predicts at day 1 which cascades will pass 10,000 posts in seven days. Depending on the rule it finds most, not all, of the 3,206 and downloads 69M to 99M posts a month, wrong guesses included. Every post of all 3,206 is 60M. These figures are for seven days and original-post roots.</li>
@@ -1918,6 +1920,11 @@ if (typeof module !== 'undefined' && module.exports) module.exports = CASCADE_TA
     quote: { size: [0, 1000, 10000], p: [0.011, 0.0213, 0.0306] },
   };
   DATA.prize = PRIZE;
+  /* Measured on the two days with every post on file (roots of 2 and 3 September 2026), with floors of 300 retweets or
+     100 replies read at 72 hours. returned: the share of all reply-led cascades of 100+ that search returns.
+     caught: of the reply-led roots returned, the share the count rule reads as reply-led. falseFlag: of the other roots
+     returned, the share it wrongly reads as reply-led. */
+  DATA.recognition = { returned: [0.248, 0.251], returned300to999: 0.259, returned1000to2999: [0.81, 0.88], caught: [0.83, 0.80], falseFlag: [0.043, 0.046] };
   const bin = (edges, v) => { let i = edges.length - 1; while (i > 0 && v < edges[i]) i--; return i; };
   function prizeShare(i) {                                   // row i of the table: the share of it that is prize draws
     if (R.led[i]) return 0;
@@ -2005,24 +2012,40 @@ if (typeof module !== 'undefined' && module.exports) module.exports = CASCADE_TA
      q1, q2 those rooted at a quote.
      When the population holds a sample of the reply-led cascades (pop.ledShare between 0 and 1), the sample is drawn
      by root before anything is read, so a root that search returns through the floor on replies alone has its
-     replies read only if it is in the sample. Search still returns, and charges for, every such root. */
+     replies read only if it is in the sample. Search still returns, and charges for, every such root.
+     recog: how a returned root is known to be reply-led before its replies are read.
+       'class' (the default, and the page's assumption until 24 November 2026): always, at no cost.
+       'counts': from the root's own counts, by the rule used for sizing: more than DATA.rule.ratio replies for each
+         retweet. Two kinds of error follow. A reply-led root that does not look it and passes the floor on retweets
+         has its replies read like any other; the read shows what it is, and it is then kept only if it is in the
+         sample, so the part left out costs its replies (strayUnits, counted in waste). A root that is not reply-led
+         but looks it is set aside unread unless it is in the sample (lost: wanted cascades given up this way).
+         One draw is made for each root: a prize draw that is kept is read whichever floor returned it. */
   function plan(pop, o) {
     const full = o.full, rq = Math.min(o.rq, full), all = o.found === 'all', passes = o.passes == null ? 1 : o.passes;
     const fr = o.fr == null ? Infinity : o.fr, fd = o.fd == null ? Infinity : o.fd, theta = o.theta == null ? 0.5 : o.theta, need = theta * rq;
     const hits = Math.max(1, Math.ceil(need * (o.stream || 0.01))), triage = o.triage || 'counts';
-    const viaShare = pop.ledShare > 0 && pop.ledShare < 1 ? pop.ledShare : 1;
+    const viaShare = pop.ledShare > 0 && pop.ledShare < 1 ? pop.ledShare : 1, byCounts = o.recog === 'counts' && !all;
+    const flagShare = pop.ledShare == null ? 1 : pop.ledShare;   // the share of roots that look reply-led whose replies are read
     const t1 = { replies: 0, quotes: 0, retweets: 0 }, t2 = { replies: 0, quotes: 0, retweets: 0, allRetweets: 0 };
-    let roots = 0, sized = 0, waste = 0, n1 = 0, n2 = 0, q1 = 0, q2 = 0, A = 0, B = 0, want1 = 0, want2 = 0, gotA = 0, gotB = 0, bought = 0;
+    let roots = 0, sized = 0, waste = 0, n1 = 0, n2 = 0, q1 = 0, q2 = 0, A = 0, B = 0, want1 = 0, want2 = 0, gotA = 0, gotB = 0, bought = 0, stray = 0, strayUnits = 0, lost = 0;
+    const read = (r) => (all || triage === 'all' ? 1 : triage === 'stream' ? binomSf(hits, Math.round(r.s), o.stream || 0.01) : (fromCounts(r.r0, r.d0, r.q0) >= need ? 1 : 0));
     for (const r of pop.rows) {
       const cand = all ? r.s >= rq : (r.r0 >= fr || r.d0 >= fd);
       if (!all && cand) roots += r.w;
-      if (r.skip) continue;                                    // returned by search, recognised, not collected
+      if (r.skip) {                                            // returned by search, recognised, not collected
+        // by counts, a reply-led root that passes the floor on retweets and does not look reply-led is read before it is dropped
+        if (byCounts && r.led && r.r0 >= fr && !looksLed(r)) { const pv = read(r); stray += r.w * pv; strayUnits += r.w * pv * r.rep; }
+        continue;
+      }
       const tier = r.s >= full ? 1 : r.s >= rq ? 2 : 0, rt = r.s - r.rep - r.qt;
       if (tier === 1) { A += r.w * r.s; want1 += r.w; } else if (tier === 2) { B += r.w * r.s; want2 += r.w; }
       if (!cand) continue;
-      const pv = all || triage === 'all' ? 1 : triage === 'stream' ? binomSf(hits, Math.round(r.s), o.stream || 0.01) : (fromCounts(r.r0, r.d0, r.q0) >= need ? 1 : 0);
+      const pv = read(r);
       if (!(pv > 0)) continue;
-      const w = r.w * pv * (!all && !r.led && !(r.r0 >= fr) ? viaShare : 1);   // an ordinary root found by its replies alone is read only if sampled; reply-led rows already carry the share
+      const coin = coinOf(r, o, fr, all, viaShare, flagShare);
+      if (tier && coin < 1) lost += r.w * pv * (1 - coin) * (byCounts && r.r0 >= fr ? 1 : 0);
+      const w = r.w * pv * coin;
       sized += w;
       if (tier === 1) { t1.replies += w * r.rep; t1.quotes += w * r.qt; t1.retweets += w * rt; gotA += w * r.s; if (r.q) q1 += w; else n1 += w; }
       else if (tier === 2) {
@@ -2030,28 +2053,63 @@ if (typeof module !== 'undefined' && module.exports) module.exports = CASCADE_TA
         bought += o.rtMode === 'first' ? w * Math.min(rt, o.rtN) : o.rtMode === 'sample' ? w * (o.rtRate || 0) * rt : 0;
       } else if (!all) waste += w * r.rep;
     }
-    t2.retweets = bought;
+    t2.retweets = bought; waste += strayUnits;
     const finding = passes * roots, cost1 = t1.replies + t1.quotes + t1.retweets, cost2 = t2.replies + t2.quotes, total = cost1 + cost2 + bought + waste + finding;
     return { full, rq, A, B, t1, t2, n1, n2, q1, q2, roots, finding, sized, waste, cost1, cost2, bought, total,
              want1, want2, found1: want1 ? (n1 + q1) / want1 : 1, found2: want2 ? (n2 + q2) / want2 : 1,
              found: want1 + want2 ? (n1 + q1 + n2 + q2) / (want1 + want2) : 1, foundPosts: A + B ? (gotA + gotB) / (A + B) : 1,
              replies: t1.replies + t2.replies, downloaded: cost1 + cost2 + bought, posts: gotA + gotB, wanted: A + B,
-             streamRetweets: (o.stream || 0) * t2.allRetweets };
+             streamRetweets: (o.stream || 0) * t2.allRetweets, stray, strayUnits, lost };
+  }
+
+  // a root that looks reply-led from its own counts: the rule that sizes it
+  const looksLed = (r) => r.d0 > DATA.rule.ratio * r.r0;
+  /* The share of a returned, wanted row whose replies are read. Rows of a sampled class already carry their share.
+     'class': an ordinary root found by its replies alone is read only if sampled (and so, as the page had it, is a kept
+     prize draw found that way). 'counts': one draw for each root, so a kept prize draw is always read, and an ordinary
+     root is read only if sampled when it was found by its replies alone or looks reply-led. */
+  function coinOf(r, o, fr, all, viaShare, flagShare) {
+    if (all || r.led) return 1;
+    const viaReply = !(r.r0 >= fr);
+    if (o.recog !== 'counts') return viaReply ? viaShare : 1;
+    if (r.prize) return 1;
+    return viaReply ? viaShare : looksLed(r) ? flagShare : 1;
   }
 
   /* Share of cascades found and sized, by size: [{ lo, hi, n, found }] over bands of the population. */
   function foundBySize(pop, o, edges) {
     const out = edges.slice(0, -1).map((lo, i) => ({ lo, hi: edges[i + 1], n: 0, got: 0 }));
     const need = (o.theta == null ? 0.5 : o.theta) * Math.min(o.rq, o.full), hits = Math.max(1, Math.ceil(need * (o.stream || 0.01)));
-    const viaShare = pop.ledShare > 0 && pop.ledShare < 1 ? pop.ledShare : 1;
+    const viaShare = pop.ledShare > 0 && pop.ledShare < 1 ? pop.ledShare : 1, flagShare = pop.ledShare == null ? 1 : pop.ledShare;
     for (const r of pop.rows) {
-      if (r.skip) continue;
       const b = out.find((x) => r.s >= x.lo && r.s < x.hi); if (!b) continue;
       const cand = r.r0 >= o.fr || r.d0 >= o.fd;
+      if (r.led) { b.ledN = (b.ledN || 0) + r.w; b.ledCand = (b.ledCand || 0) + (cand ? r.w : 0); }   // the whole class, kept or not
+      if (r.skip) continue;
       const pv = !cand ? 0 : o.triage === 'all' ? 1 : o.triage === 'stream' ? binomSf(hits, Math.round(r.s), o.stream || 0.01) : (fromCounts(r.r0, r.d0, r.q0) >= need ? 1 : 0);
-      b.n += r.w; b.got += r.w * pv * (!r.led && !(r.r0 >= o.fr) ? viaShare : 1); b.cand = (b.cand || 0) + (cand ? r.w : 0);
+      b.n += r.w; b.got += r.w * pv * coinOf(r, o, o.fr, false, viaShare, flagShare); b.cand = (b.cand || 0) + (cand ? r.w : 0);
     }
-    return out.map((b) => ({ lo: b.lo, hi: b.hi, n: b.n, found: b.n ? b.got / b.n : null, returned: b.n ? (b.cand || 0) / b.n : null }));
+    return out.map((b) => ({ lo: b.lo, hi: b.hi, n: b.n, found: b.n ? b.got / b.n : null, returned: b.n ? (b.cand || 0) / b.n : null,
+                             ledN: b.ledN || 0, ledReturned: b.ledN ? (b.ledCand || 0) / b.ledN : null }));
+  }
+
+  /* How much of a class that is sampled the sample can stand for. The sample is drawn from the roots search returns, so a
+     cascade that no floor returns has no chance of being in it. kind: 'led' (reply-led cascades) or 'prize' (prize draws).
+     For each size band [{ lo, hi, n, returned, read }]: n cascades of the class a month, kept or not; the share search
+     returns; the share whose replies would be read if drawn (returned and likely enough by the triage rule). A sampled
+     cascade stands for 1 / share of the returned ones, not of the class. */
+  function reach(pop, o, kind, edges) {
+    const out = edges.slice(0, -1).map((lo, i) => ({ lo, hi: edges[i + 1], n: 0, ret: 0, rd: 0 }));
+    const need = (o.theta == null ? 0.5 : o.theta) * Math.min(o.rq, o.full), hits = Math.max(1, Math.ceil(need * (o.stream || 0.01)));
+    const fr = o.fr == null ? Infinity : o.fr, fd = o.fd == null ? Infinity : o.fd;
+    for (const r of pop.rows) {
+      if (kind === 'led' ? !r.led : !r.prize) continue;
+      const b = out.find((x) => r.s >= x.lo && r.s < x.hi); if (!b) continue;
+      const cand = r.r0 >= fr || r.d0 >= fd;
+      const pv = !cand ? 0 : o.triage === 'all' ? 1 : o.triage === 'stream' ? binomSf(hits, Math.round(r.s), o.stream || 0.01) : (fromCounts(r.r0, r.d0, r.q0) >= need ? 1 : 0);
+      b.n += r.w; b.ret += cand ? r.w : 0; b.rd += r.w * pv;
+    }
+    return out.map((b) => ({ lo: b.lo, hi: b.hi, n: b.n, returned: b.n ? b.ret / b.n : null, read: b.n ? b.rd / b.n : null }));
   }
 
   /* Lowest value of `key` ('rq' or 'full') between lo and hi at which the plan costs no more than `budget`.
@@ -2067,7 +2125,7 @@ if (typeof module !== 'undefined' && module.exports) module.exports = CASCADE_TA
     return hi;
   }
 
-  const api = { DATA, TABLES: TAB, population, build, plan, lowest, foundBySize, fromCounts, binomSf };
+  const api = { DATA, TABLES: TAB, population, build, plan, lowest, foundBySize, reach, fromCounts, binomSf };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.CASCADE = api;
 })(typeof self !== 'undefined' ? self : globalThis);
@@ -2096,6 +2154,7 @@ if (typeof module !== 'undefined' && module.exports) module.exports = CASCADE_TA
     rtMode: 'none', rtN: 100, rtRate: 0.03,   // retweets bought for tier 2
     fr: 300, fd: 100,    // search floors on a root's own retweets and replies; a root passing either is returned. The floor on replies is needed only to find reply-led cascades; Infinity means not used
     triage: 'counts', theta: 0.5,   // whose replies are read to size the cascade, and how likely it must look
+    recog: 'counts',     // how a returned root is known to be reply-led before its replies are read: 'counts' (more than five replies for each retweet) or 'class' (always, at no cost: the page's assumption until 24 November 2026)
     passes: 3,           // search passes for each day of roots; the last is at the end of the window
     stream: 0.01,        // the sample stream, outside the cap
   };
@@ -2135,6 +2194,8 @@ if (typeof module !== 'undefined' && module.exports) module.exports = CASCADE_TA
       { key: 'triage', kind: 'seg', label: 'Read the replies of', options: [['counts', 'Likely, by counts'], ['stream', 'Likely, by stream'], ['all', 'Every root']],
         hint: 'Replies carry their own counts, so reading them gives a cascade’s size. They cost a unit each even when the cascade turns out too small. By counts: the size is read off the root’s own counts. By stream: off the cascade’s posts in the 1% sample, which needs each sampled post matched to its cascade.' },
       { key: 'theta', kind: 'range', label: 'Likely means an estimated size of at least', min: 0.2, max: 1, step: 0.05, fmt: (v) => Math.round(100 * v) + '% of the second tier', disabled: () => st.triage === 'all' },
+      { key: 'recog', kind: 'seg', label: 'Reply-led roots are recognised', options: [['counts', 'From the root’s counts'], ['class', 'Always']],
+        hint: 'From the root’s counts: a root with more than ' + D.rule.ratio + ' replies for each retweet is read as reply-led before its replies are read. On the two days with every post on file this catches ' + Math.round(100 * D.recognition.caught[1]) + ' to ' + Math.round(100 * D.recognition.caught[0]) + '% of the reply-led roots that search returns, and wrongly flags about ' + Math.round(100 * D.recognition.falseFlag[0]) + '% of the others. A reply-led root it misses has its replies read before it is dropped. On those two days that cost 45,000 to 95,000 units a day; this page shows less, because its simulated root counts give too few reply-led cascades with a well-shared root. Always: every reply-led root is recognised at no cost.' },
       { key: 'passes', kind: 'range', label: 'Search passes for each day of roots', min: 1, max: 3, step: 1, fmt: (v) => { const n = Math.min(v, st.window); return n === 1 ? 'once' : n === 2 ? 'twice' : '3 times'; }, hint: 'The last pass is at the end of the window, earlier ones at 24 and 48 hours, so a one-day window has one pass. Each pass returns every root again.' },
     ] },
   ];
@@ -2183,7 +2244,7 @@ if (typeof module !== 'undefined' && module.exports) module.exports = CASCADE_TA
 
   /* ====================================================================== the plan */
   const nPass = () => Math.min(st.passes, st.window);   // a pass a day at most
-  const opts = (over) => Object.assign({ full: st.full, rq: st.rq, passes: nPass(), fr: st.fr, fd: st.fd, triage: st.triage, theta: st.theta, rtMode: st.rtMode, rtN: st.rtN, rtRate: st.rtRate, stream: st.stream }, over || {});
+  const opts = (over) => Object.assign({ full: st.full, rq: st.rq, passes: nPass(), fr: st.fr, fd: st.fd, triage: st.triage, theta: st.theta, recog: st.recog, rtMode: st.rtMode, rtN: st.rtN, rtRate: st.rtRate, stream: st.stream }, over || {});
   const budget = () => Math.max(0, st.cap - st.reserve);
   const FOUND_MIN = 0.8;   // the automatic second tier stops where search finds less than this share of it
   const roundUp = (v) => { const p = v < 1000 ? 10 : v < 10000 ? 50 : v < 100000 ? 500 : 5000; return Math.ceil(v / p - 1e-9) * p; };
@@ -2198,6 +2259,7 @@ if (typeof module !== 'undefined' && module.exports) module.exports = CASCADE_TA
       st.rq = e == null ? top2() : Math.min(top2(), roundUp(e));
     }
   }
+  const reachOf = (kind, r) => { const lo = Math.min(r.rq, st.full === Infinity ? r.rq : st.full), b = CASCADE.reach(pop, opts({ rq: r.rq }), kind, [isFinite(lo) ? lo : 100, 1e12])[0]; return { lo: isFinite(lo) ? lo : 100, n: b.n, read: b.read }; };
   const passAges = () => { const end = 24 * st.window, n = nPass(); return n === 1 ? [end] : n === 2 ? [24, end] : [24, 48, end]; };
   const ageTxt = (h) => (h % 24 === 0 && h > 72 ? h / 24 + ' days' : h + ' hours');
   const agesTxt = () => { const a = passAges(); return a.every((h) => h <= 72) ? list(a.map(String)) + ' hours' : list(a.map(ageTxt)); };
@@ -2210,8 +2272,11 @@ if (typeof module !== 'undefined' && module.exports) module.exports = CASCADE_TA
       st.triage === 'all' ? 'Read the replies of every root returned: each reply carries its own counts, and their sum is the cascade’s size.'
         : st.triage === 'stream' ? 'Where the 1% stream holds enough of a cascade’s posts to suggest ' + bar(r) + '+ posts, read its replies: each carries its own counts, and their sum is the cascade’s size.'
         : 'Where a root’s counts suggest a cascade of ' + bar(r) + '+ posts, read its replies: each carries its own counts, and their sum is the cascade’s size.'];
-    if (st.replyLed > 0 && st.replyLed < 1) parts.splice(1, 0, 'A root with more than ' + D.rule.ratio + ' replies for each retweet is read as reply-led. Keep a random ' + Math.round(100 * st.replyLed) + '% of those roots, and of the roots returned for their replies alone, drawn by root ID; set the rest aside unread. Each one kept stands for ' + int(Math.round(1 / st.replyLed)) + '.');
-    if (st.prize < 1) parts.splice(1, 0, 'A root whose text gives entry steps for a draw or a reward is a prize draw. ' + (st.prize > 0 ? 'Keep a random ' + Math.round(100 * st.prize) + '% of them, drawn by root ID, and set the rest aside unread. Each one kept stands for ' + int(Math.round(1 / st.prize)) + '.' : 'Set them aside unread.'));
+    if (st.replyLed > 0 && st.replyLed < 1) { const q = reachOf('led', r);
+      parts.splice(1, 0, (st.recog === 'counts' ? 'A root with more than ' + D.rule.ratio + ' replies for each retweet is read as reply-led. ' : 'Reply-led roots are taken as recognised when search returns them. ')
+        + 'Keep a random ' + Math.round(100 * st.replyLed) + '% of those roots, and of the roots returned for their replies alone, drawn by root ID; set the rest aside unread. Each one kept stands for ' + int(Math.round(1 / st.replyLed)) + ' of the roots search returns. Those are ' + pct(q.read) + ' of the reply-led cascades of ' + int(q.lo) + '+ posts, so the sample cannot stand for the rest.'); }
+    if (st.prize < 1) { const q = st.prize > 0 ? reachOf('prize', r) : null;
+      parts.splice(1, 0, 'A root whose text gives entry steps for a draw or a reward is a prize draw. ' + (st.prize > 0 ? 'Keep a random ' + Math.round(100 * st.prize) + '% of them, drawn by root ID, and set the rest aside unread. Each one kept stands for ' + int(Math.round(1 / st.prize)) + ' of those returned, which are ' + pct(q.read) + ' of the prize draws of ' + int(q.lo) + '+ posts.' : 'Set them aside unread.')); }
     if (hasT1) parts.push('For cascades of ' + int(st.full) + '+ posts, fetch every quote and retweet.');
     if (hasT2) parts.push('For cascades of ' + int(r.rq) + '+ posts, fetch the quotes' + (st.rtMode === 'none' ? '; their retweets come from the 1% stream only.' : ' and ' + bought() + '.'));
     parts.push('This finds ' + pct(r.found) + ' of the cascades wanted. Check what search found against the 1% stream.');
@@ -2354,12 +2419,15 @@ if (typeof module !== 'undefined' && module.exports) module.exports = CASCADE_TA
     el('line', { x1: x0, x2: x1, y1: y0, y2: y0, stroke: 'var(--line-2)' }, f.svg);
     el('text', { x: (x0 + x1) / 2, y: f.h - 6, 'text-anchor': 'middle' }, f.svg, 'Cascade size, in posts (log scale)');
     const edges = []; for (let i = 0; i <= 12; i++) edges.push(LO * Math.pow(HI / LO, i / 12)); edges[12] = 1e9;
-    const o = opts(), bands = CASCADE.foundBySize(pop, Object.assign({}, o, { rq: Math.min(o.rq, o.full) }), edges).filter((b) => b.found != null), mid = (b) => Math.sqrt(b.lo * Math.min(b.hi, HI));
+    const o = opts(), bands = CASCADE.foundBySize(pop, Object.assign({}, o, { rq: Math.min(o.rq, o.full) }), edges).filter((b) => b.found != null || b.ledReturned != null), mid = (b) => Math.sqrt(b.lo * Math.min(b.hi, HI));
     const xs = []; for (let i = 0; i <= 90; i++) xs.push(LO * Math.pow(HI / LO, i / 90));
     el('path', { d: path(xs.map((x) => [X(x), Y(CASCADE.binomSf(1, Math.round(x), st.stream))])), fill: 'none', stroke: 'var(--ref)', 'stroke-width': 1.5, 'stroke-dasharray': '5 4' }, f.svg);
     const series = [['returned', TIER.census, 2, 'Returned by search'], ['found', 'var(--ink)', 2.75, 'Returned and sized']];
-    series.forEach(([k, col, w]) => { el('path', { d: path(bands.map((b) => [X(mid(b)), Y(b[k])])), fill: 'none', stroke: col, 'stroke-width': w, 'stroke-linejoin': 'round' }, f.svg);
-      bands.forEach((b) => el('circle', { cx: X(mid(b)), cy: Y(b[k]), r: 3.5, fill: col, stroke: 'var(--surface)', 'stroke-width': 2 }, f.svg)); });
+    const showLed = st.replyLed > 0 && st.replyLed < 1, ledCol = 'var(--sample)';
+    if (showLed) series.unshift(['ledReturned', ledCol, 2, 'Reply-led cascades returned']);
+    series.forEach(([k, col, w]) => { const bs = bands.filter((b) => b[k] != null);
+      el('path', { d: path(bs.map((b) => [X(mid(b)), Y(b[k])])), fill: 'none', stroke: col, 'stroke-width': w, 'stroke-linejoin': 'round', 'stroke-dasharray': k === 'ledReturned' ? '6 3' : null }, f.svg);
+      bs.forEach((b) => el('circle', { cx: X(mid(b)), cy: Y(b[k]), r: 3.5, fill: col, stroke: 'var(--surface)', 'stroke-width': 2 }, f.svg)); });
     if (st.rq < top2()) { el('line', { x1: X(st.rq), x2: X(st.rq), y1: y1, y2: y0, stroke: TIER.rq, 'stroke-dasharray': '2 4' }, f.svg); el('text', { x: X(st.rq) + 6, y: y0 - 8, style: 'fill:var(--ink)' }, f.svg, 'second tier from ' + int(st.rq)); }
     const cross = el('line', { y1: y1, y2: y0, stroke: 'var(--ink-3)', visibility: 'hidden' }, f.svg), ov = el('rect', { x: x0, y: y1, width: x1 - x0, height: y0 - y1, fill: 'transparent' }, f.svg);
     ov.addEventListener('pointermove', (ev) => {
@@ -2367,10 +2435,10 @@ if (typeof module !== 'undefined' && module.exports) module.exports = CASCADE_TA
       const q = bands[j]; if (!q) return;
       cross.setAttribute('x1', X(mid(q))); cross.setAttribute('x2', X(mid(q))); cross.setAttribute('visibility', 'visible');
       f.showTip(X(mid(q)) * b.width / f.w, ev.clientY - b.top, '<b>Cascades of ' + int(roundUp(q.lo)) + (q.hi > HI ? '+' : ' to ' + int(roundUp(q.hi))) + ' posts</b>' + row('', 'How many a month', big(q.n))
-        + row(TIER.census, 'Returned by search', pct(q.returned)) + row('var(--ink)', 'Returned and sized', pct(q.found)) + row('var(--ref)', 'Stream samples a post', pct(CASCADE.binomSf(1, Math.round(mid(q)), st.stream))));
+        + row(TIER.census, 'Returned by search', pct(q.returned)) + row('var(--ink)', 'Returned and sized', pct(q.found)) + (showLed && q.ledReturned != null ? row(ledCol, 'Reply-led cascades returned, of ' + big(q.ledN), pct(q.ledReturned)) : '') + row('var(--ref)', 'Stream samples a post', pct(CASCADE.binomSf(1, Math.round(mid(q)), st.stream))));
     });
     ov.addEventListener('pointerleave', () => { cross.setAttribute('visibility', 'hidden'); f.hideTip(); });
-    legend('c-leg-find', [['', TIER.census, 'Returned by search'], ['', 'var(--ink)', 'Returned and sized'], ['', 'var(--ref)', '1% stream samples at least one post']]);
+    legend('c-leg-find', [['', TIER.census, 'Returned by search'], ['', 'var(--ink)', 'Returned and sized']].concat(showLed ? [['', ledCol, 'Reply-led cascades returned (the sample is drawn from these)']] : [], [['', 'var(--ref)', '1% stream samples at least one post']]));
   }
 
   /* ====================================================================== render */
@@ -2384,7 +2452,9 @@ if (typeof module !== 'undefined' && module.exports) module.exports = CASCADE_TA
       ['Cascades of 10,000+ a month', big(pop.NA(10000))],
       ['Their share of those posts', pct(pop.P(10000) / pop.P(1000))],
       ['Cascades of 100+ a month', big(pop.NA(100))],
-    ].concat(st.quoteRooted ? [['Of the 1,000+, rooted at a quote', big(pop.NQ(1000))]] : [], st.replyLed ? [[st.replyLed < 1 ? 'Of those posts, in the sampled reply-led cascades' : 'Of those posts, in reply-led cascades', pct(pop.LedPosts(1000) / pop.P(1000))]] : [], st.prize ? [[st.prize < 1 ? 'Of those posts, in the sampled prize draws' : 'Of those posts, in prize draws', pct(pop.PrizePosts(1000) / pop.P(1000))]] : []).map(([k, v]) => '<dt>' + k + '</dt><dd>' + v + '</dd>').join('');
+    ].concat(st.quoteRooted ? [['Of the 1,000+, rooted at a quote', big(pop.NQ(1000))]] : [], st.replyLed ? [[st.replyLed < 1 ? 'Of those posts, in the sampled reply-led cascades' : 'Of those posts, in reply-led cascades', pct(pop.LedPosts(1000) / pop.P(1000))]] : [], st.prize ? [[st.prize < 1 ? 'Of those posts, in the sampled prize draws' : 'Of those posts, in prize draws', pct(pop.PrizePosts(1000) / pop.P(1000))]] : [],
+      st.replyLed > 0 && st.replyLed < 1 ? (() => { const q = reachOf('led', r); return [['Reply-led cascades of ' + int(q.lo) + '+ that the sample can reach', pct(q.read) + ' of ' + big(q.n)]]; })() : [],
+      st.prize > 0 && st.prize < 1 ? (() => { const q = reachOf('prize', r); return [['Prize draws of ' + int(q.lo) + '+ that the sample can reach', pct(q.read) + ' of ' + big(q.n)]]; })() : []).map(([k, v]) => '<dt>' + k + '</dt><dd>' + v + '</dd>').join('');
     const pill = document.getElementById('c-pill'); pill.className = 'pill ' + (fits ? 'ok' : 'short'); pill.textContent = fits ? 'Fits the cap' : 'Over the cap';
     const rqWords = st.rtMode === 'first' ? 'replies, quotes and first ' + int(st.rtN) + ' retweets' : st.rtMode === 'sample' ? 'replies, quotes and a random ' + Math.round(100 * st.rtRate) + '% of the retweets' : 'replies and quotes';
     const subject = hasT1 && hasT2 ? 'Every post of ' + big(c1) + ' cascades of ' + int(st.full) + '+ posts, and the ' + rqWords + ' of ' + big(c2) + ' more down to ' + int(r.rq) + ' posts,'
@@ -2405,7 +2475,7 @@ if (typeof module !== 'undefined' && module.exports) module.exports = CASCADE_TA
       ['Cascades collected in full', hasT1 ? big(c1) : 'none', hasT1 ? int(st.full) + '+ posts; ' + big(r.cost1) + ' units; ' + pct(r.found1) + ' of them found' : 'no size chosen'],
       [st.rtMode === 'none' ? 'With replies and quotes only' : 'With replies, quotes and some retweets', hasT2 ? big(c2) : 'none', hasT2 ? 'down to ' + int(r.rq) + ' posts; ' + big(r.cost2 + r.bought) + ' units; ' + pct(r.found2) + ' of them found' : 'no second tier'],
       ['Units spent a month', big(r.total), pct(r.total / st.cap) + ' of the cap' + (st.reserve ? '; ' + big(st.reserve) + ' in reserve' : '')],
-      ['Spent finding and sizing', big(r.finding + r.waste), big(r.roots) + ' roots returned; ' + big(r.waste) + ' units on replies of cascades too small'],
+      ['Spent finding and sizing', big(r.finding + r.waste), big(r.roots) + ' roots returned; ' + big(r.waste) + ' units on replies of cascades too small' + (r.stray >= 0.5 ? ' or reply-led, ' + big(r.strayUnits) + ' of them on ' + big(r.stray) + ' reply-led roots not recognised from their counts' : '')],
     ];
     document.getElementById('c-kpis').innerHTML = k.map(([a, b, s]) => '<div class="kpi"><div class="k">' + a + '</div><div class="v">' + b + '</div><div class="s">' + s + '</div></div>').join('');
     document.getElementById('c-sub-flow').textContent = 'The plan in the headline, step by step, in numbers a month. One unit is the charge for one post returned.';
@@ -2413,8 +2483,8 @@ if (typeof module !== 'undefined' && module.exports) module.exports = CASCADE_TA
     const fitAll = CASCADE.lowest(pop, opts({ rq: Infinity, found: 'all' }), 'full', st.cap, 1000, 1e6), fitRQ = CASCADE.lowest(pop, opts({ full: Infinity, found: 'all' }), 'rq', st.cap, 100, 1e6);
     document.getElementById('c-sub-fit').textContent = 'Units a month against the smallest cascade collected, if every cascade were found at no cost. On that footing every post fits the cap from about ' + (fitAll ? int(roundUp(fitAll)) : '?') + '+ posts, and replies and quotes from about ' + (fitRQ ? int(roundUp(fitRQ)) + '+' : '?') + '. The black line is your plan, with finding and sizing counted, as its second tier reaches lower.';
     document.getElementById('c-sub-grow').textContent = 'Median share of a cascade’s seven-day size reached by each hour. The median cascade has about 99% of it at 48 hours. Of the cascades that end at 10,000+ posts, ' + pct(D.passed10k[24]) + ' have passed 10,000 by 24 hours, ' + pct(D.passed10k[48]) + ' by 48 and ' + pct(D.passed10k[72]) + ' by 72.';
-    document.getElementById('c-sub-find').textContent = 'By cascade size: the share that search returns with these floors, and the share whose replies are then read. A cascade is missed when its size sits on its replies and the root stays under ' + (st.fd === Infinity ? 'the floor' : 'both floors') + ', or when the root’s counts make it look too small to size. The grey line is the chance that the 1% stream samples at least one of its posts.';
-    document.getElementById('c-foot-build').textContent = 'Cascade view, fifth version · 24 November 2026. Sizes, replies and quotes were counted by Prof. Toyoda’s group on the full Japanese stream for September 2026: ' + int(D.main.n100) + ' cascades of 100+ posts rooted at an original post, holding ' + big(D.main.posts100) + ' posts, and ' + int(D.quote.n100) + ' rooted at a quote. The page works on simulated cascades that match those counts; no row is a real cascade. Root counts and the reply-led class come from models fitted to the two days for which every post is on file; prize draws come from a topic study of 3,974 sampled roots.';
+    document.getElementById('c-sub-find').textContent = 'By cascade size: the share that search returns with these floors, and the share whose replies are then read. A cascade is missed when its size sits on its replies and the root stays under ' + (st.fd === Infinity ? 'the floor' : 'both floors') + ', or when the root’s counts make it look too small to size. The grey line is the chance that the 1% stream samples at least one of its posts.' + (st.replyLed > 0 && st.replyLed < 1 ? ' The dashed line is the share of all reply-led cascades that search returns. The sample is drawn from those, so it says nothing about the small ones search does not return.' : '');
+    document.getElementById('c-foot-build').textContent = 'Cascade view, sixth version · 24 November 2026. Sizes, replies and quotes were counted by Prof. Toyoda’s group on the full Japanese stream for September 2026: ' + int(D.main.n100) + ' cascades of 100+ posts rooted at an original post, holding ' + big(D.main.posts100) + ' posts, and ' + int(D.quote.n100) + ' rooted at a quote. The page works on simulated cascades that match those counts; no row is a real cascade. Root counts and the reply-led class come from models fitted to the two days for which every post is on file; prize draws come from a topic study of 3,974 sampled roots. Since the sixth version a reply-led root is recognised from its counts, not taken as known, and the page shows how much of each sampled class the sample can reach.';
     drawFlow(r, hasT1, hasT2, fits); drawCap(r, fits); drawTiers(r, hasT1, hasT2); drawFit(r, hasT2); drawGrow(); drawFind();
   }
 

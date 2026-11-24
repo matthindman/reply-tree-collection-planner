@@ -153,6 +153,63 @@ const but = (o) => Object.assign({}, base, o);
   yes('found share rises with size and is given for every band', f.length === 4 && f.every((b) => b.found != null) && f[3].found > f[2].found && f[2].found > f[1].found && f[1].found > f[0].found);
   yes('bands below the bar for sizing are mostly not sized', f[0].found < 0.05); }
 
+// recognising reply-led roots from their counts, one draw for each root, and what the sample can reach
+{ const o = { full: 10000, rq: 300, passes: 3, fr: 300, fd: 100, triage: 'counts', theta: 0.5, rtMode: 'none', stream: 0.01 };
+  const row = (x) => Object.assign({ w: 100, s: 1000, q: 0, led: 0, prize: 0, out: 0, rep: 400, qt: 0, r0: 400, d0: 100, q0: 0 }, x);
+  const mk = (rows, share) => { const p = C.build(rows, { replyLed: share > 0 }); p.ledShare = share; return p; };
+  const both = (rows, share) => ['class', 'counts'].map((recog) => C.plan(mk(rows.map((x) => Object.assign({}, x)), share), Object.assign({}, o, { recog })));
+  // an ordinary root that looks reply-led (more than five replies for each retweet) and passes the floor on retweets
+  let [a, b] = both([row({ r0: 400, d0: 2500, rep: 2600, s: 4000 })], 0.02);
+  check('taken as known, an ordinary root that looks reply-led is read', a.n2, 100, 1e-9);
+  check('by counts it is read only if it is in the sample', b.n2, 2, 1e-9);
+  check('and the rest are counted as wanted cascades lost', b.lost, 98, 1e-9);
+  check('it stays in the count of cascades wanted', b.want2, 100, 0);
+  check('search charges for it either way', b.finding - a.finding, 0, 0);
+  // the part of a reply-led group that is left out, with a root that does not look reply-led and passes the floor on retweets
+  [a, b] = both([row({ led: 1, out: 1, r0: 400, d0: 500, rep: 600, s: 3000 })], 0.02);
+  check('taken as known, a reply-led root left out costs nothing to read', a.waste, 0, 0);
+  check('by counts, one that does not look reply-led has its replies read first', b.waste, 100 * 600, 1e-6);
+  check('those units are reported apart', b.strayUnits, 100 * 600, 1e-6);
+  yes('and it is still not collected or wanted', b.n2 === 0 && b.want2 === 0 && b.cost2 === 0);
+  [a, b] = both([row({ led: 1, out: 1, r0: 400, d0: 2500, rep: 2600, s: 9000 })], 0.02);
+  check('one that looks reply-led is set aside unread', b.waste, 0, 0);
+  [a, b] = both([row({ led: 1, out: 1, r0: 50, d0: 200, rep: 300, s: 1200 })], 0.02);
+  check('so is one returned for its replies alone, whatever it looks like', b.waste, 0, 0);
+  // one draw for each root: a prize draw that is kept is read whichever floor returned it
+  [a, b] = both([row({ prize: 1, r0: 100, d0: 300, rep: 350, s: 1000 })], 0.02);
+  check('as the page had it, a kept prize draw found by its replies alone was drawn again', a.n2, 2, 1e-9);
+  check('with one draw for each root it is read', b.n2, 100, 1e-9);
+  // a kept reply-led row is read at its full weight in both
+  [a, b] = both([row({ led: 1, r0: 400, d0: 500, rep: 600, s: 3000 })], 0.02);
+  yes('the sampled part of a reply-led group is read in full either way', a.n2 === 100 && b.n2 === 100);
+  // nothing changes where no root looks reply-led and every root passes the floor on retweets
+  [a, b] = both([row({}), row({ s: 20000, r0: 15000, d0: 500, rep: 800 })], 0.02);
+  check('ordinary roots found by their retweets cost the same', b.total - a.total, 0, 1e-9);
+  // reach: a class of which a quarter is returned by search
+  const cls = mk([row({ led: 1, w: 2, r0: 10, d0: 150, rep: 200, s: 1000 }), row({ led: 1, out: 1, w: 98, r0: 10, d0: 150, rep: 200, s: 1000 }),
+                  row({ led: 1, w: 6, r0: 10, d0: 60, rep: 80, s: 500 }), row({ led: 1, out: 1, w: 294, r0: 10, d0: 60, rep: 80, s: 500 })], 0.02);
+  const rc = C.reach(cls, o, 'led', [300, 1e9])[0];
+  check('reach counts the whole class, kept or not', rc.n, 400, 1e-9);
+  check('a quarter of it is returned by search', rc.returned, 0.25, 1e-9);
+  check('so a 2% sample is 0.5% of the class', 0.02 * rc.read, 0.005, 1e-9);
+  check('an unreachable reply-led root costs nothing to search, size or collect', C.plan(mk([row({ led: 1, out: 1, r0: 10, d0: 60, rep: 80, s: 500 })], 0.02), Object.assign({}, o, { recog: 'counts' })).total, 0, 0);
+  // on the September population
+  const pop = C.population({ window: 3, replyLed: 0.02, prize: 0.02 });
+  const pc = C.plan(pop, Object.assign({}, o, { recog: 'class' })), pk = C.plan(pop, Object.assign({}, o, { recog: 'counts' }));
+  within('the plan published on 24 November, with reply-led roots taken as known', pc.total / M, 62.91, 0.002);
+  yes('with no recog option the plan is that one', C.plan(pop, o).total === pc.total);
+  yes('recognising them from counts costs more, by under 1M on these rows', pk.total > pc.total && pk.total - pc.total < 1e6);
+  yes('and finds within half a point as much of the second tier', Math.abs(pk.found2 - pc.found2) < 0.005);
+  yes('search returns the same roots', pk.roots === pc.roots);
+  const E = [300, 1000, 3000, 1e9], fb = C.foundBySize(pop, Object.assign({}, o, { recog: 'counts' }), E);
+  within('found by size and the plan agree on the cascades read from 300 posts up', fb.reduce((t, x) => t + x.n * x.found, 0), pk.n1 + pk.q1 + pk.n2 + pk.q2, 1e-9);
+  const rl = C.reach(pop, o, 'led', [100, 300, 1000, 3000, 1e9]), rAll = C.reach(pop, o, 'led', [100, 1e9])[0];
+  check('search returns about a quarter of all reply-led cascades (measured: 24.8% and 25.1%)', rAll.returned, 0.25, 0.02);
+  yes('reach rises with size and is complete from 3,000 posts', rl[0].returned < rl[1].returned && rl[1].returned < rl[2].returned && rl[3].returned > 0.99);
+  within('reach counts the class whatever share is kept', C.reach(C.population({ window: 3, replyLed: 0.2, prize: 0.02 }), o, 'led', [100, 1e9])[0].n, rAll.n, 1e-9);
+  within('found by size gives the same reply-led reach', (() => { const f = C.foundBySize(pop, o, [100, 1e9])[0]; return f.ledReturned; })(), rAll.returned, 1e-9);
+  yes('prize draws of 1,000+ are all within reach', C.reach(pop, o, 'prize', [1000, 1e9])[0].read > 0.99); }
+
 check('1% stream sees a 100-post cascade', C.binomSf(1, 100, 0.01), 0.634, 0.001);
 check('at least no sampled posts is certain', C.binomSf(0, 100, 0.01), 1, 0);
 console.log(failed ? '\n' + failed + ' check(s) FAILED' : '\nall checks passed');

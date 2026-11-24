@@ -51,6 +51,11 @@
     quote: { size: [0, 1000, 10000], p: [0.011, 0.0213, 0.0306] },
   };
   DATA.prize = PRIZE;
+  /* Measured on the two days with every post on file (roots of 2 and 3 September 2026), with floors of 300 retweets or
+     100 replies read at 72 hours. returned: the share of all reply-led cascades of 100+ that search returns.
+     caught: of the reply-led roots returned, the share the count rule reads as reply-led. falseFlag: of the other roots
+     returned, the share it wrongly reads as reply-led. */
+  DATA.recognition = { returned: [0.248, 0.251], returned300to999: 0.259, returned1000to2999: [0.81, 0.88], caught: [0.83, 0.80], falseFlag: [0.043, 0.046] };
   const bin = (edges, v) => { let i = edges.length - 1; while (i > 0 && v < edges[i]) i--; return i; };
   function prizeShare(i) {                                   // row i of the table: the share of it that is prize draws
     if (R.led[i]) return 0;
@@ -138,24 +143,40 @@
      q1, q2 those rooted at a quote.
      When the population holds a sample of the reply-led cascades (pop.ledShare between 0 and 1), the sample is drawn
      by root before anything is read, so a root that search returns through the floor on replies alone has its
-     replies read only if it is in the sample. Search still returns, and charges for, every such root. */
+     replies read only if it is in the sample. Search still returns, and charges for, every such root.
+     recog: how a returned root is known to be reply-led before its replies are read.
+       'class' (the default, and the page's assumption until 24 November 2026): always, at no cost.
+       'counts': from the root's own counts, by the rule used for sizing: more than DATA.rule.ratio replies for each
+         retweet. Two kinds of error follow. A reply-led root that does not look it and passes the floor on retweets
+         has its replies read like any other; the read shows what it is, and it is then kept only if it is in the
+         sample, so the part left out costs its replies (strayUnits, counted in waste). A root that is not reply-led
+         but looks it is set aside unread unless it is in the sample (lost: wanted cascades given up this way).
+         One draw is made for each root: a prize draw that is kept is read whichever floor returned it. */
   function plan(pop, o) {
     const full = o.full, rq = Math.min(o.rq, full), all = o.found === 'all', passes = o.passes == null ? 1 : o.passes;
     const fr = o.fr == null ? Infinity : o.fr, fd = o.fd == null ? Infinity : o.fd, theta = o.theta == null ? 0.5 : o.theta, need = theta * rq;
     const hits = Math.max(1, Math.ceil(need * (o.stream || 0.01))), triage = o.triage || 'counts';
-    const viaShare = pop.ledShare > 0 && pop.ledShare < 1 ? pop.ledShare : 1;
+    const viaShare = pop.ledShare > 0 && pop.ledShare < 1 ? pop.ledShare : 1, byCounts = o.recog === 'counts' && !all;
+    const flagShare = pop.ledShare == null ? 1 : pop.ledShare;   // the share of roots that look reply-led whose replies are read
     const t1 = { replies: 0, quotes: 0, retweets: 0 }, t2 = { replies: 0, quotes: 0, retweets: 0, allRetweets: 0 };
-    let roots = 0, sized = 0, waste = 0, n1 = 0, n2 = 0, q1 = 0, q2 = 0, A = 0, B = 0, want1 = 0, want2 = 0, gotA = 0, gotB = 0, bought = 0;
+    let roots = 0, sized = 0, waste = 0, n1 = 0, n2 = 0, q1 = 0, q2 = 0, A = 0, B = 0, want1 = 0, want2 = 0, gotA = 0, gotB = 0, bought = 0, stray = 0, strayUnits = 0, lost = 0;
+    const read = (r) => (all || triage === 'all' ? 1 : triage === 'stream' ? binomSf(hits, Math.round(r.s), o.stream || 0.01) : (fromCounts(r.r0, r.d0, r.q0) >= need ? 1 : 0));
     for (const r of pop.rows) {
       const cand = all ? r.s >= rq : (r.r0 >= fr || r.d0 >= fd);
       if (!all && cand) roots += r.w;
-      if (r.skip) continue;                                    // returned by search, recognised, not collected
+      if (r.skip) {                                            // returned by search, recognised, not collected
+        // by counts, a reply-led root that passes the floor on retweets and does not look reply-led is read before it is dropped
+        if (byCounts && r.led && r.r0 >= fr && !looksLed(r)) { const pv = read(r); stray += r.w * pv; strayUnits += r.w * pv * r.rep; }
+        continue;
+      }
       const tier = r.s >= full ? 1 : r.s >= rq ? 2 : 0, rt = r.s - r.rep - r.qt;
       if (tier === 1) { A += r.w * r.s; want1 += r.w; } else if (tier === 2) { B += r.w * r.s; want2 += r.w; }
       if (!cand) continue;
-      const pv = all || triage === 'all' ? 1 : triage === 'stream' ? binomSf(hits, Math.round(r.s), o.stream || 0.01) : (fromCounts(r.r0, r.d0, r.q0) >= need ? 1 : 0);
+      const pv = read(r);
       if (!(pv > 0)) continue;
-      const w = r.w * pv * (!all && !r.led && !(r.r0 >= fr) ? viaShare : 1);   // an ordinary root found by its replies alone is read only if sampled; reply-led rows already carry the share
+      const coin = coinOf(r, o, fr, all, viaShare, flagShare);
+      if (tier && coin < 1) lost += r.w * pv * (1 - coin) * (byCounts && r.r0 >= fr ? 1 : 0);
+      const w = r.w * pv * coin;
       sized += w;
       if (tier === 1) { t1.replies += w * r.rep; t1.quotes += w * r.qt; t1.retweets += w * rt; gotA += w * r.s; if (r.q) q1 += w; else n1 += w; }
       else if (tier === 2) {
@@ -163,28 +184,63 @@
         bought += o.rtMode === 'first' ? w * Math.min(rt, o.rtN) : o.rtMode === 'sample' ? w * (o.rtRate || 0) * rt : 0;
       } else if (!all) waste += w * r.rep;
     }
-    t2.retweets = bought;
+    t2.retweets = bought; waste += strayUnits;
     const finding = passes * roots, cost1 = t1.replies + t1.quotes + t1.retweets, cost2 = t2.replies + t2.quotes, total = cost1 + cost2 + bought + waste + finding;
     return { full, rq, A, B, t1, t2, n1, n2, q1, q2, roots, finding, sized, waste, cost1, cost2, bought, total,
              want1, want2, found1: want1 ? (n1 + q1) / want1 : 1, found2: want2 ? (n2 + q2) / want2 : 1,
              found: want1 + want2 ? (n1 + q1 + n2 + q2) / (want1 + want2) : 1, foundPosts: A + B ? (gotA + gotB) / (A + B) : 1,
              replies: t1.replies + t2.replies, downloaded: cost1 + cost2 + bought, posts: gotA + gotB, wanted: A + B,
-             streamRetweets: (o.stream || 0) * t2.allRetweets };
+             streamRetweets: (o.stream || 0) * t2.allRetweets, stray, strayUnits, lost };
+  }
+
+  // a root that looks reply-led from its own counts: the rule that sizes it
+  const looksLed = (r) => r.d0 > DATA.rule.ratio * r.r0;
+  /* The share of a returned, wanted row whose replies are read. Rows of a sampled class already carry their share.
+     'class': an ordinary root found by its replies alone is read only if sampled (and so, as the page had it, is a kept
+     prize draw found that way). 'counts': one draw for each root, so a kept prize draw is always read, and an ordinary
+     root is read only if sampled when it was found by its replies alone or looks reply-led. */
+  function coinOf(r, o, fr, all, viaShare, flagShare) {
+    if (all || r.led) return 1;
+    const viaReply = !(r.r0 >= fr);
+    if (o.recog !== 'counts') return viaReply ? viaShare : 1;
+    if (r.prize) return 1;
+    return viaReply ? viaShare : looksLed(r) ? flagShare : 1;
   }
 
   /* Share of cascades found and sized, by size: [{ lo, hi, n, found }] over bands of the population. */
   function foundBySize(pop, o, edges) {
     const out = edges.slice(0, -1).map((lo, i) => ({ lo, hi: edges[i + 1], n: 0, got: 0 }));
     const need = (o.theta == null ? 0.5 : o.theta) * Math.min(o.rq, o.full), hits = Math.max(1, Math.ceil(need * (o.stream || 0.01)));
-    const viaShare = pop.ledShare > 0 && pop.ledShare < 1 ? pop.ledShare : 1;
+    const viaShare = pop.ledShare > 0 && pop.ledShare < 1 ? pop.ledShare : 1, flagShare = pop.ledShare == null ? 1 : pop.ledShare;
     for (const r of pop.rows) {
-      if (r.skip) continue;
       const b = out.find((x) => r.s >= x.lo && r.s < x.hi); if (!b) continue;
       const cand = r.r0 >= o.fr || r.d0 >= o.fd;
+      if (r.led) { b.ledN = (b.ledN || 0) + r.w; b.ledCand = (b.ledCand || 0) + (cand ? r.w : 0); }   // the whole class, kept or not
+      if (r.skip) continue;
       const pv = !cand ? 0 : o.triage === 'all' ? 1 : o.triage === 'stream' ? binomSf(hits, Math.round(r.s), o.stream || 0.01) : (fromCounts(r.r0, r.d0, r.q0) >= need ? 1 : 0);
-      b.n += r.w; b.got += r.w * pv * (!r.led && !(r.r0 >= o.fr) ? viaShare : 1); b.cand = (b.cand || 0) + (cand ? r.w : 0);
+      b.n += r.w; b.got += r.w * pv * coinOf(r, o, o.fr, false, viaShare, flagShare); b.cand = (b.cand || 0) + (cand ? r.w : 0);
     }
-    return out.map((b) => ({ lo: b.lo, hi: b.hi, n: b.n, found: b.n ? b.got / b.n : null, returned: b.n ? (b.cand || 0) / b.n : null }));
+    return out.map((b) => ({ lo: b.lo, hi: b.hi, n: b.n, found: b.n ? b.got / b.n : null, returned: b.n ? (b.cand || 0) / b.n : null,
+                             ledN: b.ledN || 0, ledReturned: b.ledN ? (b.ledCand || 0) / b.ledN : null }));
+  }
+
+  /* How much of a class that is sampled the sample can stand for. The sample is drawn from the roots search returns, so a
+     cascade that no floor returns has no chance of being in it. kind: 'led' (reply-led cascades) or 'prize' (prize draws).
+     For each size band [{ lo, hi, n, returned, read }]: n cascades of the class a month, kept or not; the share search
+     returns; the share whose replies would be read if drawn (returned and likely enough by the triage rule). A sampled
+     cascade stands for 1 / share of the returned ones, not of the class. */
+  function reach(pop, o, kind, edges) {
+    const out = edges.slice(0, -1).map((lo, i) => ({ lo, hi: edges[i + 1], n: 0, ret: 0, rd: 0 }));
+    const need = (o.theta == null ? 0.5 : o.theta) * Math.min(o.rq, o.full), hits = Math.max(1, Math.ceil(need * (o.stream || 0.01)));
+    const fr = o.fr == null ? Infinity : o.fr, fd = o.fd == null ? Infinity : o.fd;
+    for (const r of pop.rows) {
+      if (kind === 'led' ? !r.led : !r.prize) continue;
+      const b = out.find((x) => r.s >= x.lo && r.s < x.hi); if (!b) continue;
+      const cand = r.r0 >= fr || r.d0 >= fd;
+      const pv = !cand ? 0 : o.triage === 'all' ? 1 : o.triage === 'stream' ? binomSf(hits, Math.round(r.s), o.stream || 0.01) : (fromCounts(r.r0, r.d0, r.q0) >= need ? 1 : 0);
+      b.n += r.w; b.ret += cand ? r.w : 0; b.rd += r.w * pv;
+    }
+    return out.map((b) => ({ lo: b.lo, hi: b.hi, n: b.n, returned: b.n ? b.ret / b.n : null, read: b.n ? b.rd / b.n : null }));
   }
 
   /* Lowest value of `key` ('rq' or 'full') between lo and hi at which the plan costs no more than `budget`.
@@ -200,7 +256,7 @@
     return hi;
   }
 
-  const api = { DATA, TABLES: TAB, population, build, plan, lowest, foundBySize, fromCounts, binomSf };
+  const api = { DATA, TABLES: TAB, population, build, plan, lowest, foundBySize, reach, fromCounts, binomSf };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.CASCADE = api;
 })(typeof self !== 'undefined' ? self : globalThis);
