@@ -15,10 +15,11 @@ Japanese X today" (about 12% of replies in conversations of 100+ posts); the oth
   September 2026, and reproduce the measured counts and post totals by size to within about 1%. Each
   row's class (root-led or reply-led) and its root's own counts come from fitted models. The page opens
   on a plan that takes every post of cascades of 10,000+ posts and the replies and quotes of cascades
-  down to 100 posts (89.7M units of the 90M left after the reserve; since the eighth version, 24
-  November 2026). It collects a random 2% of the reply-led cascades (a sample checked on X is automated
-  advertising) and a random 20% of prize draws ("follow and repost to win"), the largest share offered
-  that fits, both drawn by root ID, and searches by the root's retweet count (100+) or reply count
+  down to 100 posts (82.5M units of the 90M left after the reserve; this reach dates from the eighth
+  version, 24 November 2026). It collects a random 2% of the reply-led cascades (a sample checked on X
+  is automated advertising) and a random 2% of prize draws ("follow and repost to win"; the eighth
+  version opened on 20%, the largest share offered that fits, at 89.7M units; 2% again since the
+  ninth version, the same day), both drawn by root ID, and searches by the root's retweet count (100+) or reply count
   (100+), which finds 77% of the cascades of 100 to 9,999 posts; a slider sets each share, from none
   to all. Which rows are prize draws comes from a topic study's shares by size. Since the sixth
   version (24 November 2026) a reply-led root is recognised from its counts (more than

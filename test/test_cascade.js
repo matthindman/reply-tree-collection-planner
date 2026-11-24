@@ -213,10 +213,12 @@ const but = (o) => Object.assign({}, base, o);
   within('found by size gives the same reply-led reach', (() => { const f = C.foundBySize(pop, o, [100, 1e9])[0]; return f.ledReturned; })(), rAll.returned, 1e-9);
   yes('prize draws of 1,000+ are all within reach', C.reach(pop, o, 'prize', [1000, 1e9])[0].read > 0.99); }
 
-// the page's opening plan since the eighth version: second tier down to 100 posts, floors of 100 retweets or 100 replies, 20% of prize draws
+// the page's opening plan: second tier down to 100 posts, floors of 100 retweets or 100 replies (since the eighth version); 2% of prize draws (20% in the eighth version, 2% again since the ninth)
 { const M = 1e6, o = { full: 10000, rq: 100, passes: 3, fr: 100, fd: 100, triage: 'counts', theta: 0.5, rtMode: 'none', stream: 0.01, recog: 'counts' };
-  const pop = C.population({ window: 3, replyLed: 0.02, prize: 0.2 }), r = C.plan(pop, o);
-  within('the opening plan: down to 100 posts, with 20% of prize draws', r.total / M, 89.66, 0.002);
+  const pop = C.population({ window: 3, replyLed: 0.02, prize: 0.02 }), r = C.plan(pop, o), r20 = C.plan(C.population({ window: 3, replyLed: 0.02, prize: 0.2 }), o);
+  within('the opening plan: down to 100 posts, with 2% of prize draws', r.total / M, 82.50, 0.002);
+  within('the same plan with 20% of prize draws (the eighth version) is the largest share offered that fits', r20.total / M, 89.66, 0.002);
+  yes('with 2% of prize draws the first tier could reach 8,000 to 8,600 posts with the second tier still at 100', (() => { const f = C.lowest(pop, o, 'full', 90e6, 1000, 1e6); return f > 8000 && f < 8600; })());
   yes('it fits the 90M left after a reserve of 10M', r.total <= 90e6);
   yes('100 posts is the lowest second tier that fits', C.lowest(pop, o, 'rq', 90e6, 100, 10000) <= 100.5);
   yes('half of the prize draws would not fit', C.plan(C.population({ window: 3, replyLed: 0.02, prize: 0.5 }), o).total > 90e6);
