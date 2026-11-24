@@ -196,7 +196,10 @@ const but = (o) => Object.assign({}, base, o);
   // on the September population
   const pop = C.population({ window: 3, replyLed: 0.02, prize: 0.02 });
   const pc = C.plan(pop, Object.assign({}, o, { recog: 'class' })), pk = C.plan(pop, Object.assign({}, o, { recog: 'counts' }));
-  within('the plan published on 24 November, with reply-led roots taken as known', pc.total / M, 62.91, 0.002);
+  within('the opening plan with reply-led roots taken as known (62.91M on the rows before the seventh version)', pc.total / M, 62.34, 0.002);
+  within('and with reply-led roots recognised from counts', pk.total / M, 62.88, 0.002);
+  { const T = C.TABLES.rows; let ro = 0, fo = 0; for (let i = 0; i < T.w.length; i++) { if (T.q[i] || T.led[i]) continue; const f = T.s3[i] / T.s7[i], r0 = T.r0[i] * f, d0 = T.d0[i] * f; if (r0 >= 300 || d0 >= 100) { ro += T.w[i]; if (d0 > 5 * r0) fo += T.w[i]; } }
+    yes('ordinary roots wrongly flagged as reply-led: 4 to 7% of those returned (measured 4.3% and 4.6%)', fo / ro > 0.04 && fo / ro < 0.07); }
   yes('with no recog option the plan is that one', C.plan(pop, o).total === pc.total);
   yes('recognising them from counts costs more, by under 1M on these rows', pk.total > pc.total && pk.total - pc.total < 1e6);
   yes('and finds within half a point as much of the second tier', Math.abs(pk.found2 - pc.found2) < 0.005);

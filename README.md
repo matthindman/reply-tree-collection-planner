@@ -21,12 +21,17 @@ Japanese X today" (about 12% of replies in conversations of 100+ posts); the oth
   version (24 November 2026) a reply-led root is recognised from its counts (more than
   five replies for each retweet), not taken as known: one that the rule misses has its replies read
   before it is dropped, one that it wrongly flags is set aside unless sampled, and one draw is made for
-  each root (`recog` in `plan()`; `'class'` gives the earlier arithmetic and its 62.9M units). The page
+  each root (`recog` in `plan()`; `'class'` gives the earlier arithmetic). The page
   also shows how much of each sampled class the sample can reach (`reach()`): the sample is drawn from
-  the roots search returns, about a quarter of all reply-led cascades. Two known gaps against the two
-  measured days: the simulated root counts give 0.26M units a month for reply-led roots read before
-  they are recognised where the measured days give about 1.4M to 2.9M, and they put the reach among
-  reply-led cascades of 300 to 999 posts near 40% where 26% was measured. The table is
+  the roots search returns, about a quarter of all reply-led cascades. Since the seventh version
+  (24 November 2026) the retweets and replies on an original-post root are drawn together, from
+  histograms of the two days with every post on file in groups of 100+ cascades; before, the three root
+  counts were drawn independently and 10% of ordinary roots looked reply-led where 4 to 5% was measured
+  (now 6%). The opening plan is 62.9M units. One known gap against the two measured days: the rows give
+  0.54M units a month for reply-led roots read before they are recognised where those days give about
+  1.4M to 2.9M. The reach among reply-led cascades of 300 to 999 posts is near 40% on this page and 26%
+  on the two measured days; that is a difference between early September and the whole month, not an
+  error in the rows, as the sixth version's text had it. The table is
   generated outside this folder and is not meant to be edited by hand. The arithmetic is `src/cascade_model.js`, the view
   `src/cascades.js` (defaults in `DEFAULTS`), checked by `node test/test_cascade.js`.
   The measured cascades themselves are confidential and are not in this repository; only aggregate
